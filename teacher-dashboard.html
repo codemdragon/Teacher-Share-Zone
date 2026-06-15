@@ -1,0 +1,866 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Teacher Dashboard - Teacher Share Zone</title>
+  <link rel="stylesheet" href="css/styles.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+  <div class="dashboard-wrapper">
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <div class="logo-icon">T</div>
+        <span class="logo-text">Share Zone</span>
+      </div>
+      <ul class="nav-menu">
+        <li class="nav-item active" id="nav-classes" onclick="switchTab('classes')">
+          <a href="#"><i class="fa-solid fa-graduation-cap"></i> My Classes</a>
+        </li>
+        <li class="nav-item" id="nav-upload" onclick="switchTab('upload')">
+          <a href="#"><i class="fa-solid fa-cloud-arrow-up"></i> Upload & Share</a>
+        </li>
+      </ul>
+      <div class="sidebar-footer">
+        <div style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 12px; word-break: break-all;" id="teacher-email"></div>
+        <button class="btn btn-secondary btn-block btn-sm" onclick="handleLogout()">
+          <i class="fa-solid fa-right-from-bracket"></i> Sign Out
+        </button>
+      </div>
+    </aside>
+
+    <!-- Main Content Area -->
+    <main class="main-content">
+      <!-- Tab: Classes -->
+      <section id="tab-classes-content">
+        <div class="content-header">
+          <div>
+            <h1 class="content-title">My Classes</h1>
+            <p class="content-subtitle">Manage your classes, students, and generate access links</p>
+          </div>
+          <button class="btn btn-primary" onclick="openModal('class-modal')">
+            <i class="fa-solid fa-plus"></i> Add Class
+          </button>
+        </div>
+
+        <div class="grid" id="classes-grid">
+          <!-- Dynamically filled with classes -->
+        </div>
+      </section>
+
+      <!-- Tab: Upload & Share -->
+      <section id="tab-upload-content" style="display: none;">
+        <div class="content-header">
+          <div>
+            <h1 class="content-title">Upload & Share Work</h1>
+            <p class="content-subtitle">Select a student, upload work, and apply custom annotations</p>
+          </div>
+        </div>
+
+        <div class="glass-card" style="padding: 32px; max-width: 800px; margin: 0 auto;">
+          <div class="form-group">
+            <label class="form-label" for="select-class">1. Select Class</label>
+            <select class="form-input" id="select-class" onchange="onClassSelected()">
+              <option value="">-- Choose Class --</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="select-student">2. Select Student</label>
+            <select class="form-input" id="select-student" disabled>
+              <option value="">-- Choose Student --</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="group-name">3. Image Group / Assignment Name</label>
+            <input class="form-input" type="text" id="group-name" placeholder="e.g. Unit 3 Math Homework">
+          </div>
+
+          <label class="form-label">4. Upload Student Work Images</label>
+          <div class="upload-zone" id="drop-zone" onclick="document.getElementById('file-input').click()">
+            <input type="file" id="file-input" multiple accept="image/*" style="display: none;" onchange="handleFileSelect(event)">
+            <i class="fa-solid fa-cloud-arrow-up upload-icon"></i>
+            <h3>Drag & Drop images here</h3>
+            <p style="color: var(--text-secondary); margin-top: 8px;">or click to browse from device</p>
+          </div>
+
+          <div id="upload-progress-container" style="display: none; margin-bottom: 24px;">
+            <div style="display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 0.9rem;">
+              <span id="upload-status-text">Uploading to Cloudinary...</span>
+              <span id="upload-percentage">0%</span>
+            </div>
+            <div style="background: var(--bg-tertiary); height: 8px; border-radius: 4px; overflow: hidden;">
+              <div id="upload-progress-bar" style="background: var(--accent-teal); height: 100%; width: 0%; transition: width 0.1s ease;"></div>
+            </div>
+          </div>
+
+          <div id="image-group-preview-container" style="display: none;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+              <h4 style="font-family: var(--font-display);">Uploaded Images <span id="img-count-badge" class="badge badge-teal">0 images</span></h4>
+              <button class="btn btn-secondary btn-sm" onclick="document.getElementById('file-input').click()">
+                <i class="fa-solid fa-plus"></i> Add More Images
+              </button>
+            </div>
+            <div class="image-grid-preview" id="image-previews"></div>
+            
+            <div style="display: flex; justify-content: flex-end; gap: 12px; margin-top: 32px;">
+              <button class="btn btn-secondary" onclick="resetUploadForm()">Clear</button>
+              <button class="btn btn-primary" onclick="shareCreatedGroup()" id="btn-share-group">
+                <i class="fa-solid fa-share-nodes"></i> Share with Student
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- Class Modal -->
+  <div class="modal-overlay" id="class-modal">
+    <div class="modal-content glass-card">
+      <div class="modal-header">
+        <h3 style="font-size: 1.4rem;">Add New Class</h3>
+        <button class="modal-close" onclick="closeModal('class-modal')">&times;</button>
+      </div>
+      <form onsubmit="handleCreateClass(event)">
+        <div class="form-group">
+          <label class="form-label" for="new-class-name">Class Name</label>
+          <input class="form-input" type="text" id="new-class-name" required placeholder="e.g. 5th Grade Algebra">
+        </div>
+        <div style="display: flex; justify-content: flex-end; gap: 12px; margin-top: 24px;">
+          <button class="btn btn-secondary btn-sm" type="button" onclick="closeModal('class-modal')">Cancel</button>
+          <button class="btn btn-primary btn-sm" type="submit">Create Class</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Student Modal -->
+  <div class="modal-overlay" id="student-modal">
+    <div class="modal-content glass-card">
+      <div class="modal-header">
+        <h3 style="font-size: 1.4rem;">Add Student to <span id="modal-class-name"></span></h3>
+        <button class="modal-close" onclick="closeModal('student-modal')">&times;</button>
+      </div>
+      <form onsubmit="handleCreateStudent(event)">
+        <input type="hidden" id="modal-class-id">
+        <div class="form-group">
+          <label class="form-label" for="new-student-name">Student Full Name</label>
+          <input class="form-input" type="text" id="new-student-name" required placeholder="e.g. John Doe">
+        </div>
+        <div style="display: flex; justify-content: flex-end; gap: 12px; margin-top: 24px;">
+          <button class="btn btn-secondary btn-sm" type="button" onclick="closeModal('student-modal')">Cancel</button>
+          <button class="btn btn-primary btn-sm" type="submit">Add Student</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Student Work Modal (Drill-down) -->
+  <div class="modal-overlay" id="student-work-modal">
+    <div class="modal-content glass-card" style="max-width: 800px; width: 90%;">
+      <div class="modal-header">
+        <h3 style="font-size: 1.4rem;">Work for <span id="work-modal-student-name"></span></h3>
+        <button class="modal-close" onclick="closeModal('student-work-modal')">&times;</button>
+      </div>
+      <div class="modal-body" id="student-work-container" style="max-height: 60vh; overflow-y: auto; padding-top: 16px;">
+        <div style="text-align: center; color: var(--text-secondary); padding: 20px;">Loading work...</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Fullscreen Annotation Tool Modal -->
+  <div class="annotation-modal" id="annotation-tool-modal" style="display: none;">
+    <div class="annotation-toolbar">
+      <div class="tool-group">
+        <span style="font-family: var(--font-display); font-weight: 700; font-size: 1.1rem; color: #fff;" id="annotating-filename">Annotate Work</span>
+      </div>
+      
+      <!-- Brush, Text, Erase, Select tools -->
+      <div class="tool-group">
+        <button class="tool-btn active" id="tool-draw" onclick="setTool('draw')" title="Draw Tool">
+          <i class="fa-solid fa-pencil"></i>
+        </button>
+        <button class="tool-btn" id="tool-text" onclick="setTool('text')" title="Add Text">
+          <i class="fa-solid fa-font"></i>
+        </button>
+        <button class="tool-btn" id="tool-erase" onclick="setTool('erase')" title="Eraser">
+          <i class="fa-solid fa-eraser"></i>
+        </button>
+        <button class="tool-btn" id="tool-select" onclick="setTool('select')" title="Select Tool">
+          <i class="fa-solid fa-square-check"></i>
+        </button>
+      </div>
+
+      <!-- Color swatches -->
+      <div class="tool-group color-picker-wrapper">
+        <span>Color:</span>
+        <div class="color-swatch active" style="background: #ef4444;" onclick="setColor('#ef4444', this)"></div>
+        <div class="color-swatch" style="background: #10b981;" onclick="setColor('#10b981', this)"></div>
+        <div class="color-swatch" style="background: #3b82f6;" onclick="setColor('#3b82f6', this)"></div>
+        <div class="color-swatch" style="background: #f59e0b;" onclick="setColor('#f59e0b', this)"></div>
+        <div class="color-swatch" style="background: #ffffff;" onclick="setColor('#ffffff', this)"></div>
+      </div>
+
+      <!-- Sizing & Zoom -->
+      <div class="tool-group" style="color: var(--text-secondary); font-size: 0.85rem;">
+        <span>Size:</span>
+        <input class="size-slider" type="range" min="2" max="24" value="6" id="brush-size-slider" oninput="setBrushSize(this.value)">
+        <span id="brush-size-val" style="margin-right: 12px;">6px</span>
+        
+        <span>Zoom:</span>
+        <input class="size-slider" type="range" min="100" max="400" value="100" step="10" id="zoom-slider" oninput="setZoom(this.value)">
+        <span id="zoom-val">100%</span>
+      </div>
+
+      <!-- Undo/Redo & Saves -->
+      <div class="tool-group">
+        <button class="tool-btn" onclick="annotator.undo()" title="Undo"><i class="fa-solid fa-rotate-left"></i></button>
+        <button class="tool-btn" onclick="annotator.redo()" title="Redo"><i class="fa-solid fa-rotate-right"></i></button>
+        <button class="tool-btn" onclick="annotator.clearSelected()" title="Delete Selected" style="color: var(--accent-rose);"><i class="fa-solid fa-trash"></i></button>
+        <button class="tool-btn" onclick="annotator.clear()" title="Clear All"><i class="fa-solid fa-trash-can"></i></button>
+        
+        <button class="btn btn-primary btn-sm" onclick="saveAnnotations()" style="margin-left: 12px;">
+          <i class="fa-solid fa-check"></i> Save & Exit
+        </button>
+      </div>
+    </div>
+
+    <div class="canvas-container" id="canvas-scroll-area">
+      <div id="annotation-engine-wrapper">
+        <!-- AnnotationEngine builds its own bg+overlay canvases here -->
+      </div>
+    </div>
+  </div>
+
+  <div class="toast-container" id="toast-container"></div>
+
+  <!-- Scripts -->
+  <script src="js/supabase-client.js"></script>
+  <script src="js/cloudinary-upload.js"></script>
+  <script src="js/annotation-engine.js"></script>
+  
+  <script>
+    let activeTab = 'classes';
+    let classes = [];
+    let students = [];
+    let currentUploadGroup = null;
+    let annotatingImageId = null;
+    let annotator = null;
+    let currentWorkStudentId = null;
+    let currentWorkStudentName = null;
+    let initialAnnotationsString = null;
+
+    // Toast alerts helper
+    function showToast(message, type = 'success') {
+      const container = document.getElementById('toast-container');
+      const toast = document.createElement('div');
+      toast.className = `toast toast-${type}`;
+      toast.innerHTML = `<span>${message}</span>`;
+      container.appendChild(toast);
+      setTimeout(() => toast.classList.add('active'), 10);
+      setTimeout(() => {
+        toast.classList.remove('active');
+        setTimeout(() => toast.remove(), 300);
+      }, 3500);
+    }
+
+    // Auth Protection
+    window.addEventListener('DOMContentLoaded', async () => {
+      if (!db.isLoggedIn()) {
+        window.location.href = 'index.html';
+        return;
+      }
+      document.getElementById('teacher-email').textContent = db.user.email;
+      await loadClasses();
+    });
+
+    function handleLogout() {
+      db.signOut();
+      window.location.href = 'index.html';
+    }
+
+    // Modal Utilities
+    function openModal(id) {
+      document.getElementById(id).classList.add('active');
+    }
+    function closeModal(id) {
+      document.getElementById(id).classList.remove('active');
+    }
+
+    // Switch between dashboard menus
+    async function switchTab(tab) {
+      document.getElementById(`nav-${activeTab}`).classList.remove('active');
+      document.getElementById(`tab-${activeTab}-content`).style.display = 'none';
+      
+      activeTab = tab;
+      document.getElementById(`nav-${activeTab}`).classList.add('active');
+      document.getElementById(`tab-${activeTab}-content`).style.display = 'block';
+
+      if (tab === 'classes') {
+        await loadClasses();
+      } else if (tab === 'upload') {
+        populateUploadClassDropdown();
+      }
+    }
+
+    // Load Classes from Supabase
+    async function loadClasses() {
+      try {
+        classes = await db.getClasses();
+        const grid = document.getElementById('classes-grid');
+        grid.innerHTML = '';
+
+        if (classes.length === 0) {
+          grid.innerHTML = `
+            <div class="glass-card" style="grid-column: 1/-1; padding: 40px; text-align: center; color: var(--text-secondary);">
+              <i class="fa-solid fa-folder-open" style="font-size: 3rem; margin-bottom: 16px; color: var(--accent-teal);"></i>
+              <h3>No classes created yet</h3>
+              <p style="margin-top: 8px;">Create a class to start adding students.</p>
+            </div>
+          `;
+          return;
+        }
+
+        for (const cls of classes) {
+          const classStudents = await db.getStudents(cls.id);
+          const studentRows = classStudents.map(student => {
+            const loginUrl = `${window.location.origin}/student-login.html?name=${encodeURIComponent(student.name)}&code=${student.password}`;
+            return `
+              <div class="student-row" onclick="openStudentWorkModal('${student.id}', '${student.name.replace(/'/g, "\\'")}')" style="cursor: pointer;" title="View Student Work">
+                <div class="student-info">
+                  <h4>${student.name}</h4>
+                  <p>Access Code: <strong>${student.password}</strong></p>
+                </div>
+                <div class="student-actions" onclick="event.stopPropagation()">
+                  <button class="btn btn-secondary btn-sm" onclick="copyToClipboard('${loginUrl}', event)" title="Copy Direct Portal URL">
+                    <i class="fa-solid fa-link"></i> Link
+                  </button>
+                  <button class="btn btn-secondary btn-sm" style="color: var(--accent-rose);" onclick="deleteStudent('${student.id}', event)">
+                    <i class="fa-solid fa-trash-can"></i>
+                  </button>
+                </div>
+              </div>
+            `;
+          }).join('');
+
+          const card = document.createElement('div');
+          card.className = 'glass-card class-card';
+          card.innerHTML = `
+            <div class="class-card-header">
+              <h3 class="class-card-title">${cls.name}</h3>
+              <button class="btn btn-secondary btn-sm" style="color: var(--accent-rose);" onclick="deleteClass('${cls.id}', event)">
+                <i class="fa-solid fa-trash-can"></i> Class
+              </button>
+            </div>
+            <div class="class-card-stats">
+              <span><i class="fa-solid fa-user-group"></i> ${classStudents.length} Students</span>
+            </div>
+            <button class="btn btn-secondary btn-block btn-sm" onclick="showAddStudentModal('${cls.id}', '${cls.name}', event)">
+              <i class="fa-solid fa-user-plus"></i> Add Student
+            </button>
+            <div class="student-list">
+              ${studentRows || '<p style="color: var(--text-muted); font-size: 0.85rem; text-align: center; padding: 12px 0;">No students in this class yet.</p>'}
+            </div>
+          `;
+          grid.appendChild(card);
+        }
+      } catch (err) {
+        showToast("Error loading classes: " + err.message, "error");
+      }
+    }
+
+    async function handleCreateClass(e) {
+      e.preventDefault();
+      const nameInput = document.getElementById('new-class-name');
+      const name = nameInput.value.trim();
+      
+      try {
+        await db.createClass(name);
+        nameInput.value = '';
+        closeModal('class-modal');
+        showToast("Class created successfully!");
+        await loadClasses();
+      } catch (err) {
+        showToast("Error creating class: " + err.message, "error");
+      }
+    }
+
+    async function deleteClass(classId, e) {
+      e.stopPropagation();
+      if (!confirm("Are you sure you want to delete this class? This will delete all its students and assignments!")) return;
+      try {
+        await db.deleteClass(classId);
+        showToast("Class deleted successfully.");
+        await loadClasses();
+      } catch (err) {
+        showToast("Error deleting class: " + err.message, "error");
+      }
+    }
+
+    function showAddStudentModal(classId, className, e) {
+      e.stopPropagation();
+      document.getElementById('modal-class-id').value = classId;
+      document.getElementById('modal-class-name').textContent = className;
+      document.getElementById('new-student-name').value = '';
+      openModal('student-modal');
+    }
+
+    async function handleCreateStudent(e) {
+      e.preventDefault();
+      const classId = document.getElementById('modal-class-id').value;
+      const nameInput = document.getElementById('new-student-name');
+      const name = nameInput.value.trim();
+      
+      // Auto generate random 5-digit number
+      const password = Math.floor(10000 + Math.random() * 90000).toString();
+
+      try {
+        await db.createStudent(classId, name, password);
+        nameInput.value = '';
+        closeModal('student-modal');
+        showToast(`Student added with login code: ${password}`);
+        await loadClasses();
+      } catch (err) {
+        showToast("Error adding student: " + err.message, "error");
+      }
+    }
+
+    async function deleteStudent(studentId, e) {
+      e.stopPropagation();
+      if (!confirm("Are you sure you want to delete this student?")) return;
+      try {
+        await db.deleteStudent(studentId);
+        showToast("Student deleted.");
+        await loadClasses();
+      } catch (err) {
+        showToast("Error deleting student: " + err.message, "error");
+      }
+    }
+
+    function copyToClipboard(text, e) {
+      e.stopPropagation();
+      navigator.clipboard.writeText(text).then(() => {
+        showToast("Direct portal link copied to clipboard!");
+      }).catch(err => {
+        showToast("Failed to copy link: " + err.message, "error");
+      });
+    }
+
+    // View student work from Classes tab
+    async function openStudentWorkModal(studentId, studentName) {
+      currentWorkStudentId = studentId;
+      currentWorkStudentName = studentName;
+      document.getElementById('work-modal-student-name').textContent = studentName;
+      openModal('student-work-modal');
+      
+      const container = document.getElementById('student-work-container');
+      container.innerHTML = '<div style="text-align: center; color: var(--text-secondary); padding: 40px;"><i class="fa-solid fa-spinner fa-spin fa-2x"></i><p style="margin-top: 12px;">Loading work...</p></div>';
+
+      try {
+        const groups = await db.getImageGroups(studentId);
+        if (groups.length === 0) {
+          container.innerHTML = `
+            <div style="text-align: center; color: var(--text-secondary); padding: 40px;">
+              <i class="fa-solid fa-folder-open" style="font-size: 3rem; margin-bottom: 16px; color: var(--accent-teal);"></i>
+              <h3>No work uploaded yet</h3>
+              <p style="margin-top: 8px;">Upload work for this student in the "Upload & Share" tab.</p>
+            </div>
+          `;
+          return;
+        }
+
+        container.innerHTML = '';
+        
+        for (const group of groups) {
+          const groupDiv = document.createElement('div');
+          groupDiv.className = 'glass-card';
+          groupDiv.style.marginBottom = '20px';
+          groupDiv.style.padding = '20px';
+          groupDiv.innerHTML = `
+            <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 12px; margin-bottom: 16px;">
+              <div style="display: flex; align-items: center; gap: 12px;">
+                <h4 style="font-family: var(--font-display); font-size: 1.2rem; color: var(--accent-teal); margin: 0;">${group.name}</h4>
+                <button onclick="deleteImageGroup('${group.id}', event)" title="Delete entire group" style="background: none; border: none; color: var(--accent-rose); cursor: pointer; padding: 4px; font-size: 1rem;"><i class="fa-solid fa-trash-can"></i></button>
+              </div>
+              <div style="display: flex; align-items: center; gap: 10px;">
+                <span style="font-size: 0.85rem; color: var(--text-secondary);">${new Date(group.created_at).toLocaleDateString()}</span>
+                <button onclick="openAddImagesToGroup('${group.id}', event)" title="Add images to this group" style="background: rgba(20,184,166,0.15); border: 1px solid var(--accent-teal); color: var(--accent-teal); cursor: pointer; padding: 4px 10px; border-radius: 6px; font-size: 0.8rem; display: flex; align-items: center; gap: 5px;"><i class="fa-solid fa-plus"></i> Add Images</button>
+              </div>
+            </div>
+            <div class="image-grid-preview" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 12px;"></div>
+          `;
+          
+          const gridDiv = groupDiv.querySelector('.image-grid-preview');
+          const images = await db.getImages(group.id);
+          
+          if (images.length === 0) {
+            gridDiv.innerHTML = '<p style="color: var(--text-secondary); font-size: 0.9rem;">No images in this group.</p>';
+          } else {
+            images.forEach(img => {
+              const thumb = document.createElement('div');
+              thumb.className = 'preview-thumb';
+              thumb.style.cursor = 'pointer';
+              thumb.title = 'Click to Annotate';
+              
+              thumb.innerHTML = `
+                <img src="${img.original_url}" alt="work">
+                <div style="position: absolute; bottom: 0; left: 0; right: 0; background: rgba(0,0,0,0.6); color: white; display: flex; justify-content: space-between; align-items: center; font-size: 0.75rem; padding: 4px 8px;">
+                  <span><i class="fa-solid fa-pencil"></i> Edit</span>
+                  <button onclick="deleteGroupImage('${img.id}', event)" title="Delete image" style="background: none; border: none; color: var(--accent-rose); cursor: pointer; padding: 0;"><i class="fa-solid fa-trash-can"></i></button>
+                </div>
+              `;
+              
+              // Bind click event to open annotator
+              thumb.onclick = () => {
+                // If the upload form is active, we don't want to interfere, but annotator modal is fullscreen.
+                // We just need to make sure we don't overwrite currentUploadGroup if it's unrelated.
+                openAnnotator(img.id, img.original_url, img.annotations);
+                
+                // We might need to refresh this specific modal after saving.
+                // We can override saveAnnotations temporarily or just re-open/refresh this modal on save.
+              };
+              
+              gridDiv.appendChild(thumb);
+            });
+          }
+          
+          container.appendChild(groupDiv);
+        }
+      } catch (err) {
+        container.innerHTML = `<div style="text-align: center; color: var(--accent-rose); padding: 40px;">Error loading work: ${err.message}</div>`;
+      }
+    }
+
+    // Hidden file input for adding images to an existing group in the student work modal
+    let addingToGroupId = null;
+    (function () {
+      const inp = document.createElement('input');
+      inp.type = 'file';
+      inp.id = 'add-to-group-file-input';
+      inp.accept = 'image/*';
+      inp.multiple = true;
+      inp.style.display = 'none';
+      inp.addEventListener('change', handleAddImagesToGroup);
+      document.body.appendChild(inp);
+    })();
+
+    function openAddImagesToGroup(groupId, e) {
+      if (e) e.stopPropagation();
+      addingToGroupId = groupId;
+      document.getElementById('add-to-group-file-input').value = '';
+      document.getElementById('add-to-group-file-input').click();
+    }
+
+    async function handleAddImagesToGroup(e) {
+      const files = e.target.files;
+      if (!files || files.length === 0 || !addingToGroupId) return;
+
+      showToast(`Uploading ${files.length} image${files.length > 1 ? 's' : ''}...`);
+      try {
+        for (let i = 0; i < files.length; i++) {
+          const result = await uploadToCloudinary(files[i], null);
+          await db.addImage(addingToGroupId, result.url, result.public_id);
+        }
+        showToast(`${files.length} image${files.length > 1 ? 's' : ''} added successfully!`);
+        // Refresh the student work modal
+        if (currentWorkStudentId) {
+          openStudentWorkModal(currentWorkStudentId, currentWorkStudentName);
+        }
+      } catch (err) {
+        showToast('Upload failed: ' + err.message, 'error');
+      }
+      addingToGroupId = null;
+    }
+
+    // Populate dropdowns on Upload Screen
+    function populateUploadClassDropdown() {
+      const clsSelect = document.getElementById('select-class');
+      clsSelect.innerHTML = '<option value="">-- Choose Class --</option>';
+      
+      classes.forEach(c => {
+        const opt = document.createElement('option');
+        opt.value = c.id;
+        opt.textContent = c.name;
+        clsSelect.appendChild(opt);
+      });
+
+      document.getElementById('select-student').disabled = true;
+      document.getElementById('select-student').innerHTML = '<option value="">-- Choose Student --</option>';
+    }
+
+    async function onClassSelected() {
+      const classId = document.getElementById('select-class').value;
+      const studentSelect = document.getElementById('select-student');
+      studentSelect.innerHTML = '<option value="">-- Choose Student --</option>';
+
+      if (!classId) {
+        studentSelect.disabled = true;
+        return;
+      }
+
+      try {
+        const classStudents = await db.getStudents(classId);
+        classStudents.forEach(s => {
+          const opt = document.createElement('option');
+          opt.value = s.id;
+          opt.textContent = s.name;
+          studentSelect.appendChild(opt);
+        });
+        studentSelect.disabled = false;
+      } catch (err) {
+        showToast("Error loading students: " + err.message, "error");
+      }
+    }
+
+    // File selection & Cloudinary upload handling
+    async function handleFileSelect(e) {
+      const files = e.target.files;
+      if (!files || files.length === 0) return;
+
+      const classId = document.getElementById('select-class').value;
+      const studentId = document.getElementById('select-student').value;
+      const groupName = document.getElementById('group-name').value.trim();
+
+      if (!classId || !studentId || !groupName) {
+        showToast("Please select Class, Student, and enter an Assignment Name first!", "error");
+        return;
+      }
+
+      // 1. Create the Image Group first if not created already
+      try {
+        if (!currentUploadGroup) {
+          const [group] = await db.createImageGroup(classId, studentId, groupName);
+          currentUploadGroup = group;
+        }
+
+        // Show uploading progress layout
+        const progressContainer = document.getElementById('upload-progress-container');
+        const progressBar = document.getElementById('upload-progress-bar');
+        const progressPercentage = document.getElementById('upload-percentage');
+        const statusText = document.getElementById('upload-status-text');
+
+        progressContainer.style.display = 'block';
+
+        for (let i = 0; i < files.length; i++) {
+          const file = files[i];
+          statusText.textContent = `Uploading file ${i + 1} of ${files.length}: ${file.name}`;
+          progressBar.style.width = '0%';
+          progressPercentage.textContent = '0%';
+
+          // Upload to Cloudinary
+          const result = await uploadToCloudinary(file, (percent) => {
+            progressBar.style.width = `${percent}%`;
+            progressPercentage.textContent = `${percent}%`;
+          });
+
+          // Add image metadata to Supabase group
+          await db.addImage(currentUploadGroup.id, result.url, result.public_id);
+        }
+
+        progressContainer.style.display = 'none';
+        showToast("All images uploaded successfully!");
+        
+        // Load previews
+        await refreshImagePreviews();
+
+      } catch (err) {
+        showToast("Upload failed: " + err.message, "error");
+        document.getElementById('upload-progress-container').style.display = 'none';
+      }
+    }
+
+    // Refresh previews of current upload group
+    async function refreshImagePreviews() {
+      if (!currentUploadGroup) return;
+
+      try {
+        const images = await db.getImages(currentUploadGroup.id);
+        const container = document.getElementById('image-group-preview-container');
+        const previewsDiv = document.getElementById('image-previews');
+        
+        previewsDiv.innerHTML = '';
+        container.style.display = 'block';
+
+        // Update image count badge
+        const badge = document.getElementById('img-count-badge');
+        if (badge) badge.textContent = `${images.length} image${images.length !== 1 ? 's' : ''}`;
+
+        images.forEach(img => {
+          const thumb = document.createElement('div');
+          thumb.className = 'preview-thumb';
+          thumb.style.cursor = 'pointer';
+          thumb.title = 'Click to annotate';
+          thumb.onclick = () => openAnnotator(img.id, img.original_url, img.annotations);
+          thumb.innerHTML = `
+            <img src="${img.original_url}" alt="work">
+            <div class="thumb-actions">
+              <button class="thumb-btn" onclick="deleteGroupImage('${img.id}', event)" title="Delete image">
+                <i class="fa-solid fa-trash-can"></i>
+              </button>
+            </div>
+          `;
+          previewsDiv.appendChild(thumb);
+        });
+      } catch (err) {
+        showToast("Error loading previews: " + err.message, "error");
+      }
+    }
+
+    async function deleteGroupImage(imageId, e) {
+      if (e) e.stopPropagation();
+      if (!confirm("Are you sure you want to delete this image?")) return;
+      try {
+        await db.deleteImage(imageId);
+        showToast("Image deleted.");
+        
+        if (document.getElementById('student-work-modal').style.display !== 'none' && currentWorkStudentId) {
+          openStudentWorkModal(currentWorkStudentId, currentWorkStudentName);
+        } else if (currentUploadGroup) {
+          await refreshImagePreviews();
+        }
+      } catch (err) {
+        showToast("Failed to delete image: " + err.message, "error");
+      }
+    }
+
+    async function deleteImageGroup(groupId, e) {
+      if (e) e.stopPropagation();
+      if (!confirm("Are you sure you want to delete this entire assignment group? This cannot be undone.")) return;
+      try {
+        await db.deleteImageGroup(groupId);
+        showToast("Assignment group deleted.");
+        if (document.getElementById('student-work-modal').style.display !== 'none' && currentWorkStudentId) {
+          openStudentWorkModal(currentWorkStudentId, currentWorkStudentName);
+        }
+      } catch (err) {
+        showToast("Failed to delete assignment: " + err.message, "error");
+      }
+    }
+
+    function resetUploadForm() {
+      currentUploadGroup = null;
+      document.getElementById('group-name').value = '';
+      document.getElementById('image-group-preview-container').style.display = 'none';
+      document.getElementById('image-previews').innerHTML = '';
+      document.getElementById('file-input').value = '';
+    }
+
+    async function shareCreatedGroup() {
+      if (!currentUploadGroup) return;
+      try {
+        await db.shareImageGroup(currentUploadGroup.id, true);
+        showToast("Assignment shared with student successfully!");
+        resetUploadForm();
+        switchTab('classes');
+      } catch (err) {
+        showToast("Failed to share group: " + err.message, "error");
+      }
+    }
+
+    // Canvas Annotator functions
+    function openAnnotator(imageId, imageUrl, initialAnnotations) {
+      annotatingImageId = imageId;
+      initialAnnotationsString = JSON.stringify(initialAnnotations || []);
+      document.getElementById('annotation-tool-modal').style.display = 'flex';
+
+      // Reset zoom slider
+      const zoomSlider = document.getElementById('zoom-slider');
+      if (zoomSlider) {
+        zoomSlider.value = 100;
+        document.getElementById('zoom-val').textContent = '100%';
+      }
+
+      // Reset tool buttons UI
+      document.querySelectorAll('#tool-draw, #tool-text, #tool-erase').forEach(b => b.classList.remove('active'));
+      document.getElementById('tool-draw').classList.add('active');
+
+      // Init annotation engine using the wrapper div — it builds its own canvases
+      annotator = new AnnotationEngine('annotation-engine-wrapper', {
+        tool: 'draw',
+        color: '#ef4444',
+        strokeWidth: 6
+      });
+
+      annotator.loadImage(imageUrl, () => {
+        annotator.setAnnotations(initialAnnotations || []);
+      });
+    }
+
+    function setTool(toolName) {
+      // Only toggle the annotation tool buttons, not undo/redo/clear
+      document.querySelectorAll('#tool-draw, #tool-text, #tool-erase, #tool-select').forEach(b => b.classList.remove('active'));
+      document.getElementById(`tool-${toolName}`).classList.add('active');
+      if (annotator) annotator.tool = toolName;
+    }
+
+    function setColor(colorHex, element) {
+      document.querySelectorAll('.color-swatch').forEach(sw => sw.classList.remove('active'));
+      element.classList.add('active');
+      if (annotator) annotator.color = colorHex;
+    }
+
+    function setBrushSize(size) {
+      document.getElementById('brush-size-val').textContent = `${size}px`;
+      if (annotator) {
+        annotator.strokeWidth = parseInt(size);
+        annotator.fontSize = Math.max(16, parseInt(size) * 3);
+      }
+    }
+
+    function setZoom(val) {
+      document.getElementById('zoom-val').textContent = `${val}%`;
+      if (annotator) annotator.setZoom(parseInt(val));
+    }
+
+    async function saveAnnotations() {
+      if (!annotatingImageId || !annotator) return;
+      try {
+        // Commit any in-progress text input before saving
+        if (annotator.textInputEl) annotator._commitTextInput();
+
+        const annotations = annotator.getAnnotations();
+        const currentAnnotationsString = JSON.stringify(annotations);
+        
+        if (currentAnnotationsString !== initialAnnotationsString) {
+          await db.updateImageAnnotations(annotatingImageId, annotations);
+          showToast("Annotations saved successfully!");
+        }
+
+        // Close modal and cleanup
+        document.getElementById('annotation-tool-modal').style.display = 'none';
+        document.getElementById('annotation-engine-wrapper').innerHTML = '';
+        annotatingImageId = null;
+        annotator = null;
+        initialAnnotationsString = null;
+
+        await refreshImagePreviews();
+        if (document.getElementById('student-work-modal').style.display !== 'none' && currentWorkStudentId) {
+          openStudentWorkModal(currentWorkStudentId, currentWorkStudentName);
+        }
+      } catch (err) {
+        showToast("Failed to save annotations: " + err.message, "error");
+      }
+    }
+
+    // Drag over styling
+    const dropZone = document.getElementById('drop-zone');
+    dropZone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      dropZone.classList.add('dragover');
+    });
+    dropZone.addEventListener('dragleave', () => {
+      dropZone.classList.remove('dragover');
+    });
+    dropZone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dropZone.classList.remove('dragover');
+      document.getElementById('file-input').files = e.dataTransfer.files;
+      handleFileSelect({ target: { files: e.dataTransfer.files } });
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Teacher Share Zone - Portal</title>
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <div class="auth-wrapper">
+    <div class="auth-container glass-card" id="auth-card">
+      <div class="logo-icon" style="margin: 0 auto 16px; width: 48px; height: 48px; font-size: 1.5rem;">T</div>
+      <h1 class="auth-logo">Teacher Share Zone</h1>
+      <p class="auth-subtitle" id="auth-subtitle">Teacher Access Portal</p>
+
+      <form id="auth-form" onsubmit="handleAuth(event)">
+        <div class="form-group">
+          <label class="form-label" for="email">Email Address</label>
+          <input class="form-input" type="email" id="email" required placeholder="teacher@school.com">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="password">Password</label>
+          <input class="form-input" type="password" id="password" required placeholder="••••••••">
+        </div>
+        <button class="btn btn-primary btn-block" type="submit" id="submit-btn">
+          <span>Sign In</span>
+          <div class="spinner" id="btn-spinner" style="display: none; width: 18px; height: 18px; border-width: 2px;"></div>
+        </button>
+      </form>
+
+      <div class="auth-switch">
+        <span id="switch-text">New to Share Zone?</span>
+        <a href="#" id="switch-link" onclick="toggleAuthMode(event)">Create Teacher Account</a>
+      </div>
+
+      <div class="auth-switch" style="margin-top: 12px; font-size: 0.85rem;">
+        <span>Are you a Student?</span>
+        <a href="student-login.html" style="color: var(--accent-blue);">Go to Student Login</a>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast-container" id="toast-container"></div>
+
+  <!-- Scripts -->
+  <script src="js/supabase-client.js"></script>
+  <script>
+    let isSignUp = false;
+
+    // Toast message helper
+    function showToast(message, type = 'success') {
+      const container = document.getElementById('toast-container');
+      const toast = document.createElement('div');
+      toast.className = `toast toast-${type}`;
+      toast.innerHTML = `
+        <span>${message}</span>
+      `;
+      container.appendChild(toast);
+      
+      // trigger slide-in
+      setTimeout(() => toast.classList.add('active'), 10);
+      
+      // auto-dismiss
+      setTimeout(() => {
+        toast.classList.remove('active');
+        setTimeout(() => toast.remove(), 300);
+      }, 3500);
+    }
+
+    // Toggle between login and signup modes
+    function toggleAuthMode(e) {
+      if (e) e.preventDefault();
+      isSignUp = !isSignUp;
+      
+      const subtitle = document.getElementById('auth-subtitle');
+      const submitBtn = document.getElementById('submit-btn').querySelector('span');
+      const switchText = document.getElementById('switch-text');
+      const switchLink = document.getElementById('switch-link');
+      
+      if (isSignUp) {
+        subtitle.textContent = "Create Teacher Account";
+        submitBtn.textContent = "Register Account";
+        switchText.textContent = "Already have an account?";
+        switchLink.textContent = "Sign In instead";
+      } else {
+        subtitle.textContent = "Teacher Access Portal";
+        submitBtn.textContent = "Sign In";
+        switchText.textContent = "New to Share Zone?";
+        switchLink.textContent = "Create Teacher Account";
+      }
+    }
+
+    // Handle Auth Submission
+    async function handleAuth(e) {
+      e.preventDefault();
+      const email = document.getElementById('email').value.trim();
+      const password = document.getElementById('password').value;
+      const submitBtn = document.getElementById('submit-btn');
+      const spinner = document.getElementById('btn-spinner');
+      
+      // Show loading
+      submitBtn.disabled = true;
+      spinner.style.display = 'block';
+      
+      try {
+        if (isSignUp) {
+          await db.signUp(email, password);
+          showToast("Registration successful! Logging in...", "success");
+          setTimeout(() => {
+            window.location.href = 'teacher-dashboard.html';
+          }, 1000);
+        } else {
+          await db.signIn(email, password);
+          showToast("Logged in successfully!", "success");
+          setTimeout(() => {
+            window.location.href = 'teacher-dashboard.html';
+          }, 1000);
+        }
+      } catch (err) {
+        showToast(err.message || "Authentication failed", "error");
+        submitBtn.disabled = false;
+        spinner.style.display = 'none';
+      }
+    }
+
+    // Redirect if already logged in
+    window.addEventListener('DOMContentLoaded', () => {
+      if (db.isLoggedIn()) {
+        window.location.href = 'teacher-dashboard.html';
+      }
+    });
+  </script>
+</body>
+</html>

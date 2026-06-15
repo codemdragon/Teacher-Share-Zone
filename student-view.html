@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Student Portal - Teacher Share Zone</title>
+  <link rel="stylesheet" href="css/styles.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body style="background-color: var(--bg-primary);">
+
+  <!-- Student Header -->
+  <header class="student-header">
+    <div style="display: flex; align-items: center; gap: 12px;">
+      <div class="logo-icon" style="background: linear-gradient(135deg, var(--accent-blue), var(--accent-purple));">S</div>
+      <div>
+        <h2 style="font-family: var(--font-display); font-size: 1.25rem;" id="student-welcome-name">Student Portal</h2>
+        <span style="font-size: 0.85rem; color: var(--text-secondary);" id="student-class-badge">Class</span>
+      </div>
+    </div>
+    <button class="btn btn-secondary btn-sm" onclick="studentLogout()">
+      <i class="fa-solid fa-right-from-bracket"></i> Exit Portal
+    </button>
+  </header>
+
+  <!-- Main View -->
+  <main class="main-content" style="max-width: 1200px;">
+    <!-- Group Cards View -->
+    <div id="groups-list-view">
+      <h2 style="margin-bottom: 24px; font-family: var(--font-display);">Your Shared Assignments</h2>
+      <div class="grid" id="shared-groups-grid">
+        <!-- Filled dynamically -->
+      </div>
+    </div>
+
+    <!-- Gallery Detail View (images inside selected group) -->
+    <div id="gallery-detail-view" style="display: none;">
+      <div style="display: flex; align-items: center; gap: 16px; margin-bottom: 24px;">
+        <button class="btn btn-secondary btn-sm" onclick="goBackToGroups()">
+          <i class="fa-solid fa-arrow-left"></i> Back to Assignments
+        </button>
+        <h2 id="gallery-group-title" style="font-family: var(--font-display);">Assignment Details</h2>
+      </div>
+
+      <div class="image-gallery-grid" id="gallery-images-grid">
+        <!-- Thumbnails of assignment images -->
+      </div>
+    </div>
+  </main>
+
+  <!-- Fullscreen Student Zoom & Annotation Viewer Modal -->
+  <div class="annotation-modal" id="student-viewer-modal" style="display: none; background: #000;">
+    <div class="annotation-toolbar">
+      <div class="tool-group">
+        <button class="btn btn-secondary btn-sm" onclick="closeStudentViewer()">
+          <i class="fa-solid fa-xmark"></i> Close Viewer
+        </button>
+        <span id="viewer-image-index" style="color: var(--text-secondary); font-size: 0.9rem;">Image 1 of 1</span>
+      </div>
+
+      <!-- Zoom and reset controls -->
+      <div class="tool-group">
+        <button class="tool-btn" onclick="zoomViewer.zoom = Math.min(zoomViewer.zoom + 0.2, 4); zoomViewer.applyTransform();" title="Zoom In">
+          <i class="fa-solid fa-magnifying-glass-plus"></i>
+        </button>
+        <button class="tool-btn" onclick="zoomViewer.zoom = Math.max(zoomViewer.zoom - 0.2, 0.5); zoomViewer.applyTransform();" title="Zoom Out">
+          <i class="fa-solid fa-magnifying-glass-minus"></i>
+        </button>
+        <button class="tool-btn" onclick="zoomViewer.reset()" title="Reset Zoom">
+          <i class="fa-solid fa-expand"></i>
+        </button>
+      </div>
+
+      <!-- Prev / Next navigation -->
+      <div class="tool-group">
+        <button class="btn btn-secondary btn-sm" onclick="navigateImage(-1)" id="btn-prev-img">
+          <i class="fa-solid fa-chevron-left"></i> Prev
+        </button>
+        <button class="btn btn-secondary btn-sm" onclick="navigateImage(1)" id="btn-next-img">
+          Next <i class="fa-solid fa-chevron-right"></i>
+        </button>
+      </div>
+    </div>
+
+    <!-- Viewer viewport container -->
+    <div class="viewer-main" id="viewer-viewport">
+      <!-- Target of Zoom & Pan -->
+      <div class="viewer-image-container" id="viewer-pan-target">
+        <img class="viewer-image" id="viewer-img" src="" alt="assignment image">
+        <canvas class="viewer-canvas" id="viewer-overlay-canvas"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast-container" id="toast-container"></div>
+
+  <!-- Scripts -->
+  <script src="js/supabase-client.js"></script>
+  <script src="js/annotation-engine.js"></script>
+  <script>
+    let studentSession = null;
+    let sharedGroups = [];
+    let currentImages = [];
+    let currentImageIndex = 0;
+    let zoomViewer = null;
+
+    function showToast(message, type = 'success') {
+      const container = document.getElementById('toast-container');
+      const toast = document.createElement('div');
+      toast.className = `toast toast-${type}`;
+      toast.innerHTML = `<span>${message}</span>`;
+      container.appendChild(toast);
+      setTimeout(() => toast.classList.add('active'), 10);
+      setTimeout(() => {
+        toast.classList.remove('active');
+        setTimeout(() => toast.remove(), 300);
+      }, 3500);
+    }
+
+    // Auth Protection for Student Portal
+    window.addEventListener('DOMContentLoaded', () => {
+      studentSession = JSON.parse(localStorage.getItem('student.session'));
+      if (!studentSession) {
+        window.location.href = 'student-login.html';
+        return;
+      }
+
+      document.getElementById('student-welcome-name').textContent = studentSession.name;
+      loadSharedGroups();
+    });
+
+    function studentLogout() {
+      localStorage.removeItem('student.session');
+      window.location.href = 'student-login.html';
+    }
+
+    // Load Image Groups shared with current student
+    async function loadSharedGroups() {
+      try {
+        sharedGroups = await db.getSharedImageGroupsForStudent(studentSession.id);
+        const grid = document.getElementById('shared-groups-grid');
+        grid.innerHTML = '';
+
+        if (sharedGroups.length === 0) {
+          grid.innerHTML = `
+            <div class="glass-card" style="grid-column: 1/-1; padding: 40px; text-align: center; color: var(--text-secondary);">
+              <i class="fa-solid fa-folder-open" style="font-size: 3rem; margin-bottom: 16px; color: var(--accent-blue);"></i>
+              <h3>No assignments shared with you yet</h3>
+              <p style="margin-top: 8px;">Check back later or ask your teacher for a shared link.</p>
+            </div>
+          `;
+          return;
+        }
+
+        sharedGroups.forEach(group => {
+          const card = document.createElement('div');
+          card.className = 'glass-card class-card';
+          card.onclick = () => viewGroupDetails(group);
+          card.innerHTML = `
+            <div class="class-card-header">
+              <h3 class="class-card-title" style="color: var(--accent-blue);">${group.name}</h3>
+            </div>
+            <div class="class-card-stats">
+              <span>Shared on: ${new Date(group.created_at).toLocaleDateString()}</span>
+            </div>
+            <button class="btn btn-secondary btn-block btn-sm">
+              <i class="fa-solid fa-images"></i> View Images
+            </button>
+          `;
+          grid.appendChild(card);
+        });
+      } catch (err) {
+        showToast("Error loading assignments: " + err.message, "error");
+      }
+    }
+
+    // Open detail page showing assignment images
+    async function viewGroupDetails(group) {
+      document.getElementById('groups-list-view').style.display = 'none';
+      document.getElementById('gallery-detail-view').style.display = 'block';
+      document.getElementById('gallery-group-title').textContent = group.name;
+
+      const grid = document.getElementById('gallery-images-grid');
+      grid.innerHTML = '<div class="spinner" style="margin: 0 auto; grid-column: 1/-1;"></div>';
+
+      try {
+        currentImages = await db.getImages(group.id);
+        grid.innerHTML = '';
+
+        if (currentImages.length === 0) {
+          grid.innerHTML = '<p style="grid-column: 1/-1; color: var(--text-secondary);">No images in this assignment.</p>';
+          return;
+        }
+
+        currentImages.forEach((img, idx) => {
+          const card = document.createElement('div');
+          card.className = 'glass-card gallery-thumbnail-card';
+          card.onclick = () => openStudentViewer(idx);
+          card.innerHTML = `
+            <img src="${img.original_url}" alt="assignment page">
+            <div class="gallery-card-overlay">
+              <span style="font-size: 0.85rem; font-weight: 600;">Page ${idx + 1}</span>
+            </div>
+          `;
+          grid.appendChild(card);
+        });
+      } catch (err) {
+        showToast("Error loading images: " + err.message, "error");
+      }
+    }
+
+    function goBackToGroups() {
+      document.getElementById('groups-list-view').style.display = 'block';
+      document.getElementById('gallery-detail-view').style.display = 'none';
+    }
+
+    // Fullscreen zoom viewer triggers
+    function openStudentViewer(index) {
+      currentImageIndex = index;
+      document.getElementById('student-viewer-modal').style.display = 'flex';
+      
+      // Setup touch zoom/pan behavior
+      zoomViewer = new ZoomPanViewer('viewer-viewport', 'viewer-pan-target');
+      
+      loadImageIntoViewer();
+
+      // resize support
+      window.onresize = () => {
+        if (currentImages[currentImageIndex]) {
+          renderOverlayCanvas();
+        }
+      };
+    }
+
+    function closeStudentViewer() {
+      document.getElementById('student-viewer-modal').style.display = 'none';
+      zoomViewer = null;
+      window.onresize = null;
+    }
+
+    function loadImageIntoViewer() {
+      const img = currentImages[currentImageIndex];
+      const viewerImg = document.getElementById('viewer-img');
+      const canvas = document.getElementById('viewer-overlay-canvas');
+      
+      zoomViewer.reset();
+      
+      document.getElementById('viewer-image-index').textContent = `Page ${currentImageIndex + 1} of ${currentImages.length}`;
+
+      // Set button states
+      document.getElementById('btn-prev-img').disabled = currentImageIndex === 0;
+      document.getElementById('btn-next-img').disabled = currentImageIndex === currentImages.length - 1;
+
+      // Render static annotations as dynamic overlay
+      viewerImg.src = img.original_url;
+      renderStaticAnnotations(canvas, img.original_url, img.annotations || []);
+    }
+
+    function renderOverlayCanvas() {
+      const canvas = document.getElementById('viewer-overlay-canvas');
+      const img = currentImages[currentImageIndex];
+      renderStaticAnnotations(canvas, img.original_url, img.annotations || []);
+    }
+
+    function navigateImage(direction) {
+      const targetIndex = currentImageIndex + direction;
+      if (targetIndex >= 0 && targetIndex < currentImages.length) {
+        currentImageIndex = targetIndex;
+        loadImageIntoViewer();
+      }
+    }
+  </script>
+</body>
+</html>
