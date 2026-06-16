@@ -6,6 +6,68 @@
   <title>Student Portal - Teacher Share Zone</title>
   <link rel="stylesheet" href="css/styles.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    /* Upload Confirmation Modal */
+    .confirm-overlay {
+      position: fixed; inset: 0; z-index: 9999;
+      background: rgba(0,0,0,0.7); backdrop-filter: blur(6px);
+      display: flex; align-items: center; justify-content: center;
+      animation: fadeIn 0.2s ease;
+    }
+    .confirm-dialog {
+      background: var(--bg-secondary); border: 1px solid var(--border-primary);
+      border-radius: 16px; padding: 28px; max-width: 560px; width: 92%;
+      max-height: 80vh; overflow-y: auto; box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+    }
+    .confirm-dialog h3 { font-family: var(--font-display); margin-bottom: 16px; }
+    .confirm-preview-grid {
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+      gap: 10px; margin: 16px 0;
+    }
+    .confirm-preview-item {
+      position: relative; border-radius: 10px; overflow: hidden;
+      border: 1px solid var(--border-primary); aspect-ratio: 1;
+    }
+    .confirm-preview-item img {
+      width: 100%; height: 100%; object-fit: cover;
+    }
+    .confirm-preview-item .page-badge {
+      position: absolute; bottom: 4px; right: 4px;
+      background: rgba(0,0,0,0.7); color: #fff;
+      font-size: 0.65rem; padding: 2px 6px; border-radius: 6px;
+    }
+    .confirm-actions {
+      display: flex; gap: 12px; justify-content: flex-end; margin-top: 20px;
+    }
+
+    /* Create Group Modal */
+    .create-group-overlay {
+      position: fixed; inset: 0; z-index: 9999;
+      background: rgba(0,0,0,0.7); backdrop-filter: blur(6px);
+      display: flex; align-items: center; justify-content: center;
+      animation: fadeIn 0.2s ease;
+    }
+    .create-group-dialog {
+      background: var(--bg-secondary); border: 1px solid var(--border-primary);
+      border-radius: 16px; padding: 28px; max-width: 440px; width: 92%;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+    }
+    .create-group-dialog h3 { font-family: var(--font-display); margin-bottom: 16px; }
+    .create-group-dialog input {
+      width: 100%; padding: 12px 16px; border-radius: 10px;
+      border: 1px solid var(--border-primary); background: var(--bg-tertiary);
+      color: var(--text-primary); font-size: 1rem; margin-bottom: 16px;
+      outline: none; transition: border-color 0.2s;
+    }
+    .create-group-dialog input:focus { border-color: var(--accent-blue); }
+
+    /* Student-created badge */
+    .badge-student-group {
+      background: linear-gradient(135deg, var(--accent-blue), var(--accent-purple));
+      color: #fff; font-size: 0.65rem; padding: 3px 8px; border-radius: 8px;
+      display: inline-block; margin-top: 4px;
+    }
+  </style>
 </head>
 <body style="background-color: var(--bg-primary);">
 
@@ -27,7 +89,12 @@
   <main class="main-content" style="max-width: 1200px;">
     <!-- Group Cards View -->
     <div id="groups-list-view">
-      <h2 style="margin-bottom: 24px; font-family: var(--font-display);">Your Shared Assignments</h2>
+      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; flex-wrap: wrap; gap: 12px;">
+        <h2 style="font-family: var(--font-display);">Your Shared Assignments</h2>
+        <button class="btn btn-primary btn-sm" id="create-group-btn" style="display: none; background: var(--accent-blue);" onclick="openCreateGroupModal()">
+          <i class="fa-solid fa-folder-plus"></i> Create Image Group
+        </button>
+      </div>
       <div class="grid" id="shared-groups-grid">
         <!-- Filled dynamically -->
       </div>
@@ -35,11 +102,29 @@
 
     <!-- Gallery Detail View (images inside selected group) -->
     <div id="gallery-detail-view" style="display: none;">
-      <div style="display: flex; align-items: center; gap: 16px; margin-bottom: 24px;">
-        <button class="btn btn-secondary btn-sm" onclick="goBackToGroups()">
-          <i class="fa-solid fa-arrow-left"></i> Back to Assignments
-        </button>
-        <h2 id="gallery-group-title" style="font-family: var(--font-display);">Assignment Details</h2>
+      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; flex-wrap: wrap; gap: 12px;">
+        <div style="display: flex; align-items: center; gap: 16px;">
+          <button class="btn btn-secondary btn-sm" onclick="goBackToGroups()">
+            <i class="fa-solid fa-arrow-left"></i> Back to Assignments
+          </button>
+          <h2 id="gallery-group-title" style="font-family: var(--font-display);">Assignment Details</h2>
+        </div>
+        <div id="student-upload-section" style="display: none;">
+          <input type="file" id="student-file-input" accept="image/*" multiple style="display: none;" onchange="handleStudentFileSelect(event)">
+          <button class="btn btn-primary btn-sm" onclick="document.getElementById('student-file-input').click()" style="background: var(--accent-blue);">
+            <i class="fa-solid fa-upload"></i> Upload Your Work
+          </button>
+        </div>
+      </div>
+
+      <div id="student-upload-progress" style="display: none; margin-bottom: 24px; padding: 16px;" class="glass-card">
+        <div style="display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 0.9rem;">
+          <span id="student-upload-status">Uploading image...</span>
+          <span id="student-upload-percent">0%</span>
+        </div>
+        <div style="background: var(--bg-tertiary); height: 8px; border-radius: 4px; overflow: hidden;">
+          <div id="student-upload-progress-bar" style="background: var(--accent-blue); height: 100%; width: 0%; transition: width 0.1s ease;"></div>
+        </div>
       </div>
 
       <div class="image-gallery-grid" id="gallery-images-grid">
@@ -96,6 +181,7 @@
 
   <!-- Scripts -->
   <script src="js/supabase-client.js"></script>
+  <script src="js/cloudinary-upload.js"></script>
   <script src="js/annotation-engine.js"></script>
   <script>
     let studentSession = null;
@@ -103,6 +189,8 @@
     let currentImages = [];
     let currentImageIndex = 0;
     let zoomViewer = null;
+    let currentViewingGroup = null;
+    let pendingUploadFiles = []; // files waiting for confirmation
 
     function showToast(message, type = 'success') {
       const container = document.getElementById('toast-container');
@@ -117,7 +205,7 @@
       }, 3500);
     }
 
-    // Auth Protection for Student Portal
+    // ───────── Auth & Init ─────────
     window.addEventListener('DOMContentLoaded', () => {
       studentSession = JSON.parse(localStorage.getItem('student.session'));
       if (!studentSession) {
@@ -127,6 +215,8 @@
 
       document.getElementById('student-welcome-name').textContent = studentSession.name;
       loadSharedGroups();
+      checkStudentNotifications();
+      checkUploadPermissions();
     });
 
     function studentLogout() {
@@ -134,48 +224,187 @@
       window.location.href = 'student-login.html';
     }
 
-    // Load Image Groups shared with current student
-    async function loadSharedGroups() {
+    // Check if this student is allowed to upload and show the create group button
+    async function checkUploadPermissions() {
       try {
-        sharedGroups = await db.getSharedImageGroupsForStudent(studentSession.id);
-        const grid = document.getElementById('shared-groups-grid');
-        grid.innerHTML = '';
-
-        if (sharedGroups.length === 0) {
-          grid.innerHTML = `
-            <div class="glass-card" style="grid-column: 1/-1; padding: 40px; text-align: center; color: var(--text-secondary);">
-              <i class="fa-solid fa-folder-open" style="font-size: 3rem; margin-bottom: 16px; color: var(--accent-blue);"></i>
-              <h3>No assignments shared with you yet</h3>
-              <p style="margin-top: 8px;">Check back later or ask your teacher for a shared link.</p>
-            </div>
-          `;
-          return;
+        const studentDetails = await db.getStudentDetails(studentSession.id);
+        const info = studentDetails[0];
+        const classEnabled = info.classes?.student_uploads_enabled !== false;
+        const studentEnabled = info.uploads_enabled !== false;
+        if (classEnabled && studentEnabled) {
+          document.getElementById('create-group-btn').style.display = 'inline-flex';
         }
-
-        sharedGroups.forEach(group => {
-          const card = document.createElement('div');
-          card.className = 'glass-card class-card';
-          card.onclick = () => viewGroupDetails(group);
-          card.innerHTML = `
-            <div class="class-card-header">
-              <h3 class="class-card-title" style="color: var(--accent-blue);">${group.name}</h3>
-            </div>
-            <div class="class-card-stats">
-              <span>Shared on: ${new Date(group.created_at).toLocaleDateString()}</span>
-            </div>
-            <button class="btn btn-secondary btn-block btn-sm">
-              <i class="fa-solid fa-images"></i> View Images
-            </button>
-          `;
-          grid.appendChild(card);
-        });
-      } catch (err) {
-        showToast("Error loading assignments: " + err.message, "error");
+      } catch (e) {
+        console.error("Failed to check upload permissions", e);
       }
     }
 
-    // Open detail page showing assignment images
+    // Check notifications for student updates
+    async function checkStudentNotifications() {
+      try {
+        const notifs = await db.getNotifications(null, studentSession.id);
+        if (notifs.length > 0) {
+          showToast("New corrections or assignment updates available!", "info");
+          await db.markNotificationsAsRead(null, studentSession.id);
+        }
+      } catch (e) {
+        console.error("Failed to check notifications", e);
+      }
+    }
+
+    // ───────── Load Groups with IndexedDB Caching ─────────
+    async function loadSharedGroups(forceRefresh = false) {
+      const grid = document.getElementById('shared-groups-grid');
+      grid.innerHTML = '<div class="spinner" style="margin: 0 auto; grid-column: 1/-1;"></div>';
+
+      try {
+        // Try cache first (1 minute TTL)
+        if (!forceRefresh) {
+          const cached = await cacheManager.getCachedGroups(studentSession.id, 60000);
+          if (cached && cached.length > 0) {
+            sharedGroups = cached;
+            renderGroupCards();
+            // Background refresh to detect changes
+            refreshGroupsInBackground();
+            return;
+          }
+        }
+
+        // Fetch fresh from DB
+        sharedGroups = await db.getSharedImageGroupsForStudent(studentSession.id);
+        await cacheManager.cacheGroups(studentSession.id, sharedGroups);
+        renderGroupCards();
+      } catch (err) {
+        showToast("Error loading assignments: " + err.message, "error");
+        // Try to show stale cache if network fails
+        const stale = await cacheManager.getCachedGroups(studentSession.id, Infinity);
+        if (stale && stale.length > 0) {
+          sharedGroups = stale;
+          renderGroupCards();
+          showToast("Showing cached data (offline mode)", "info");
+        }
+      }
+    }
+
+    // Silently refresh groups in background and update if changed
+    async function refreshGroupsInBackground() {
+      try {
+        const fresh = await db.getSharedImageGroupsForStudent(studentSession.id);
+        const changed = JSON.stringify(fresh.map(g => g.id).sort()) !== JSON.stringify(sharedGroups.map(g => g.id).sort());
+        if (changed) {
+          sharedGroups = fresh;
+          await cacheManager.cacheGroups(studentSession.id, sharedGroups);
+          renderGroupCards();
+        }
+      } catch (e) {
+        // Silent fail for background refresh
+      }
+    }
+
+    function renderGroupCards() {
+      const grid = document.getElementById('shared-groups-grid');
+      grid.innerHTML = '';
+
+      if (sharedGroups.length === 0) {
+        grid.innerHTML = `
+          <div class="glass-card" style="grid-column: 1/-1; padding: 40px; text-align: center; color: var(--text-secondary);">
+            <i class="fa-solid fa-folder-open" style="font-size: 3rem; margin-bottom: 16px; color: var(--accent-blue);"></i>
+            <h3>No assignments shared with you yet</h3>
+            <p style="margin-top: 8px;">Check back later or ask your teacher for a shared link.</p>
+          </div>
+        `;
+        return;
+      }
+
+      sharedGroups.forEach(group => {
+        const card = document.createElement('div');
+        card.className = 'glass-card class-card';
+        card.onclick = () => viewGroupDetails(group);
+
+        const isStudentGroup = group.uploaded_by === 'student';
+        const badge = isStudentGroup
+          ? '<span class="badge-student-group"><i class="fa-solid fa-user-pen" style="margin-right: 4px;"></i>Your Group</span>'
+          : '';
+
+        card.innerHTML = `
+          <div class="class-card-header">
+            <h3 class="class-card-title" style="color: var(--accent-blue);">${group.name}</h3>
+          </div>
+          <div class="class-card-stats">
+            <span>Shared on: ${new Date(group.created_at).toLocaleDateString()}</span>
+            ${badge}
+          </div>
+          <button class="btn btn-secondary btn-block btn-sm">
+            <i class="fa-solid fa-images"></i> View Images
+          </button>
+        `;
+        grid.appendChild(card);
+      });
+    }
+
+    // ───────── Create Group Modal ─────────
+    function openCreateGroupModal() {
+      const overlay = document.createElement('div');
+      overlay.className = 'create-group-overlay';
+      overlay.id = 'create-group-overlay';
+      overlay.innerHTML = `
+        <div class="create-group-dialog">
+          <h3><i class="fa-solid fa-folder-plus" style="color: var(--accent-blue); margin-right: 8px;"></i>Create New Image Group</h3>
+          <p style="color: var(--text-secondary); margin-bottom: 16px; font-size: 0.9rem;">
+            Create a group to organize and upload your work for your teacher to review.
+          </p>
+          <input type="text" id="new-group-name-input" placeholder="Enter group name (e.g. Homework 5)" autofocus>
+          <div class="confirm-actions">
+            <button class="btn btn-secondary btn-sm" onclick="closeCreateGroupModal()">Cancel</button>
+            <button class="btn btn-primary btn-sm" style="background: var(--accent-blue);" onclick="submitCreateGroup()">
+              <i class="fa-solid fa-plus"></i> Create
+            </button>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(overlay);
+
+      // Focus the input
+      setTimeout(() => document.getElementById('new-group-name-input').focus(), 100);
+
+      // Enter key support
+      document.getElementById('new-group-name-input').addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') submitCreateGroup();
+      });
+    }
+
+    function closeCreateGroupModal() {
+      const overlay = document.getElementById('create-group-overlay');
+      if (overlay) overlay.remove();
+    }
+
+    async function submitCreateGroup() {
+      const nameInput = document.getElementById('new-group-name-input');
+      const name = nameInput.value.trim();
+      if (!name) {
+        showToast("Please enter a group name", "error");
+        return;
+      }
+
+      try {
+        const [group] = await db.createStudentImageGroup(
+          studentSession.class_id,
+          studentSession.id,
+          name
+        );
+        showToast(`Group "${name}" created successfully!`);
+        closeCreateGroupModal();
+        // Clear cache and reload
+        await cacheManager.clear('groups');
+        await loadSharedGroups(true);
+      } catch (err) {
+        showToast("Failed to create group: " + err.message, "error");
+      }
+    }
+
+    // ───────── View Group Details with Caching ─────────
     async function viewGroupDetails(group) {
+      currentViewingGroup = group;
       document.getElementById('groups-list-view').style.display = 'none';
       document.getElementById('gallery-detail-view').style.display = 'block';
       document.getElementById('gallery-group-title').textContent = group.name;
@@ -183,38 +412,249 @@
       const grid = document.getElementById('gallery-images-grid');
       grid.innerHTML = '<div class="spinner" style="margin: 0 auto; grid-column: 1/-1;"></div>';
 
+      // Check upload permissions
       try {
-        currentImages = await db.getImages(group.id);
-        grid.innerHTML = '';
+        const studentDetails = await db.getStudentDetails(studentSession.id);
+        const studentInfo = studentDetails[0];
+        const classUploadsEnabled = studentInfo.classes?.student_uploads_enabled !== false;
+        const studentUploadsEnabled = studentInfo.uploads_enabled !== false;
 
-        if (currentImages.length === 0) {
-          grid.innerHTML = '<p style="grid-column: 1/-1; color: var(--text-secondary);">No images in this assignment.</p>';
-          return;
+        const uploadSec = document.getElementById('student-upload-section');
+        if (classUploadsEnabled && studentUploadsEnabled) {
+          uploadSec.style.display = 'block';
+          uploadSec.dataset.groupId = group.id;
+        } else {
+          uploadSec.style.display = 'none';
         }
+      } catch (e) {
+        console.error("Failed to check upload permissions", e);
+      }
 
-        currentImages.forEach((img, idx) => {
-          const card = document.createElement('div');
-          card.className = 'glass-card gallery-thumbnail-card';
-          card.onclick = () => openStudentViewer(idx);
-          card.innerHTML = `
-            <img src="${img.original_url}" alt="assignment page">
-            <div class="gallery-card-overlay">
-              <span style="font-size: 0.85rem; font-weight: 600;">Page ${idx + 1}</span>
-            </div>
-          `;
-          grid.appendChild(card);
-        });
+      try {
+        // Try cache first
+        const cached = await cacheManager.getCachedImages(group.id, 60000);
+        if (cached) {
+          currentImages = cached;
+          renderGalleryImages();
+          // Background refresh
+          refreshImagesInBackground(group.id);
+        } else {
+          currentImages = await db.getImages(group.id);
+          await cacheManager.cacheImages(group.id, currentImages);
+          renderGalleryImages();
+        }
       } catch (err) {
         showToast("Error loading images: " + err.message, "error");
+      }
+    }
+
+    // Silently refresh images in background
+    async function refreshImagesInBackground(groupId) {
+      try {
+        const fresh = await db.getImages(groupId);
+        const changed = JSON.stringify(fresh.map(i => i.id)) !== JSON.stringify(currentImages.map(i => i.id));
+        if (changed) {
+          currentImages = fresh;
+          await cacheManager.cacheImages(groupId, currentImages);
+          renderGalleryImages();
+        }
+      } catch (e) { /* silent */ }
+    }
+
+    function renderGalleryImages() {
+      const grid = document.getElementById('gallery-images-grid');
+      grid.innerHTML = '';
+
+      if (currentImages.length === 0) {
+        grid.innerHTML = '<p style="grid-column: 1/-1; color: var(--text-secondary);">No images in this assignment.</p>';
+        return;
+      }
+
+      currentImages.forEach((img, idx) => {
+        const card = document.createElement('div');
+        card.className = 'glass-card gallery-thumbnail-card';
+        card.onclick = () => openStudentViewer(idx);
+
+        const tag = img.uploaded_by === 'student' ? '<span class="badge badge-teal" style="position: absolute; top: 4px; left: 4px; font-size: 0.65rem; padding: 2px 6px; z-index: 10;">Uploaded by You</span>' : '';
+
+        // Use sort_order for display, fallback to idx+1
+        const pageNum = img.sort_order || (idx + 1);
+
+        // Lazy loading
+        card.innerHTML = `
+          ${tag}
+          <img src="${img.original_url}" alt="assignment page" loading="lazy">
+          <div class="gallery-card-overlay">
+            <span style="font-size: 0.85rem; font-weight: 600;">Page ${pageNum}</span>
+          </div>
+        `;
+        grid.appendChild(card);
+      });
+    }
+
+    // ───────── Upload Confirmation Dialog ─────────
+    function handleStudentFileSelect(e) {
+      const files = Array.from(e.target.files || []);
+      if (files.length === 0) return;
+
+      // Validate files before showing confirmation
+      const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/jpg'];
+      for (const file of files) {
+        if (!allowedTypes.includes(file.type)) {
+          showToast(`File "${file.name}" format is not supported. Please upload JPG, PNG, or WEBP.`, "error");
+          e.target.value = '';
+          return;
+        }
+        if (file.size > 5 * 1024 * 1024) {
+          showToast(`File "${file.name}" exceeds the 5MB size limit.`, "error");
+          e.target.value = '';
+          return;
+        }
+      }
+
+      pendingUploadFiles = files;
+      showUploadConfirmation(files);
+    }
+
+    function showUploadConfirmation(files) {
+      // Calculate what page numbers they'll get
+      let maxSort = 0;
+      if (currentImages.length > 0) {
+        maxSort = Math.max(...currentImages.map(i => i.sort_order || 0));
+      }
+
+      const overlay = document.createElement('div');
+      overlay.className = 'confirm-overlay';
+      overlay.id = 'upload-confirm-overlay';
+
+      let previewsHTML = '';
+      const previewPromises = [];
+
+      files.forEach((file, idx) => {
+        const pageNum = maxSort + idx + 1;
+        const tempId = `preview-img-${idx}`;
+        previewsHTML += `
+          <div class="confirm-preview-item">
+            <img id="${tempId}" alt="${file.name}">
+            <span class="page-badge">Page ${pageNum}</span>
+          </div>
+        `;
+      });
+
+      overlay.innerHTML = `
+        <div class="confirm-dialog">
+          <h3><i class="fa-solid fa-cloud-arrow-up" style="color: var(--accent-blue); margin-right: 8px;"></i>Confirm Upload</h3>
+          <p style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 4px;">
+            You are about to upload <strong>${files.length}</strong> image${files.length > 1 ? 's' : ''}.
+            Please review before confirming.
+          </p>
+          <div class="confirm-preview-grid">
+            ${previewsHTML}
+          </div>
+          <p style="color: var(--text-secondary); font-size: 0.8rem;">
+            <i class="fa-solid fa-circle-info" style="margin-right: 4px;"></i>
+            Pages will be numbered starting from Page ${maxSort + 1}
+          </p>
+          <div class="confirm-actions">
+            <button class="btn btn-secondary btn-sm" onclick="cancelUploadConfirmation()">Cancel</button>
+            <button class="btn btn-primary btn-sm" style="background: var(--accent-blue);" onclick="confirmAndUpload()">
+              <i class="fa-solid fa-check"></i> Confirm & Upload
+            </button>
+          </div>
+        </div>
+      `;
+
+      document.body.appendChild(overlay);
+
+      // Render thumbnails from file blobs
+      files.forEach((file, idx) => {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          const imgEl = document.getElementById(`preview-img-${idx}`);
+          if (imgEl) imgEl.src = e.target.result;
+        };
+        reader.readAsDataURL(file);
+      });
+    }
+
+    function cancelUploadConfirmation() {
+      const overlay = document.getElementById('upload-confirm-overlay');
+      if (overlay) overlay.remove();
+      pendingUploadFiles = [];
+      document.getElementById('student-file-input').value = '';
+    }
+
+    async function confirmAndUpload() {
+      const overlay = document.getElementById('upload-confirm-overlay');
+      if (overlay) overlay.remove();
+
+      const files = pendingUploadFiles;
+      pendingUploadFiles = [];
+
+      if (files.length === 0) return;
+
+      const groupId = document.getElementById('student-upload-section').dataset.groupId;
+      if (!groupId) return;
+
+      const progressContainer = document.getElementById('student-upload-progress');
+      const progressBar = document.getElementById('student-upload-progress-bar');
+      const progressPercent = document.getElementById('student-upload-percent');
+      const statusText = document.getElementById('student-upload-status');
+
+      progressContainer.style.display = 'block';
+
+      try {
+        // Get the current max sort_order to continue page numbering
+        let maxSort = await db.getMaxSortOrder(groupId);
+
+        for (let i = 0; i < files.length; i++) {
+          const file = files[i];
+          maxSort++;
+
+          statusText.textContent = `Uploading file ${i + 1} of ${files.length}: ${file.name}`;
+          progressBar.style.width = '0%';
+          progressPercent.textContent = '0%';
+
+          // Upload to Cloudinary
+          const result = await uploadToCloudinary(file, (percent) => {
+            progressBar.style.width = `${percent}%`;
+            progressPercent.textContent = `${percent}%`;
+          });
+
+          // Add to Supabase with correct sort_order
+          await db.addImage(groupId, result.url, result.public_id, 'student', maxSort);
+
+          // Notify teacher (only once for batch)
+          if (i === 0) {
+            const studentDetails = await db.getStudentDetails(studentSession.id);
+            const classInfo = studentDetails[0]?.classes;
+            if (classInfo?.teacher_id) {
+              await db.createNotification(classInfo.teacher_id, null, `Student ${studentSession.name} uploaded ${files.length} image${files.length > 1 ? 's' : ''} to assignment group`);
+            }
+          }
+        }
+
+        showToast("Work uploaded successfully!");
+        // Invalidate cache and reload
+        await cacheManager.cacheImages(groupId, null);
+        if (currentViewingGroup) {
+          await viewGroupDetails(currentViewingGroup);
+        }
+      } catch (err) {
+        showToast(err.message || "Failed to upload file", "error");
+      } finally {
+        progressContainer.style.display = 'none';
+        document.getElementById('student-file-input').value = '';
       }
     }
 
     function goBackToGroups() {
       document.getElementById('groups-list-view').style.display = 'block';
       document.getElementById('gallery-detail-view').style.display = 'none';
+      currentViewingGroup = null;
     }
 
-    // Fullscreen zoom viewer triggers
+    // ───────── Fullscreen Viewer ─────────
     function openStudentViewer(index) {
       currentImageIndex = index;
       document.getElementById('student-viewer-modal').style.display = 'flex';
@@ -245,7 +685,8 @@
       
       zoomViewer.reset();
       
-      document.getElementById('viewer-image-index').textContent = `Page ${currentImageIndex + 1} of ${currentImages.length}`;
+      const pageNum = img.sort_order || (currentImageIndex + 1);
+      document.getElementById('viewer-image-index').textContent = `Page ${pageNum} of ${currentImages.length}`;
 
       // Set button states
       document.getElementById('btn-prev-img').disabled = currentImageIndex === 0;

@@ -103,12 +103,23 @@ class AnnotationEngine {
 
   _applyZoom() {
     if (!this.bgImage) return;
-    const w = Math.round(this.bgImage.naturalWidth  * this.zoom);
-    const h = Math.round(this.bgImage.naturalHeight * this.zoom);
-    for (const c of [this.bgCanvas, this.overlayCanvas]) {
-      c.width = w; c.height = h;
-      c.style.width = w + 'px'; c.style.height = h + 'px';
-    }
+    const nw = this.bgImage.naturalWidth;
+    const nh = this.bgImage.naturalHeight;
+    const w = Math.round(nw * this.zoom);
+    const h = Math.round(nh * this.zoom);
+    
+    // Internal resolution is always the natural size of the image
+    this.bgCanvas.width = nw;
+    this.bgCanvas.height = nh;
+    this.overlayCanvas.width = nw;
+    this.overlayCanvas.height = nh;
+    
+    // Visual display size is zoomed
+    this.bgCanvas.style.width = w + 'px';
+    this.bgCanvas.style.height = h + 'px';
+    this.overlayCanvas.style.width = w + 'px';
+    this.overlayCanvas.style.height = h + 'px';
+
     this.wrapper.style.width  = w + 'px';
     this.wrapper.style.height = h + 'px';
   }
@@ -146,12 +157,23 @@ class AnnotationEngine {
   // ── Coord helper ──────────────────────────────────────────────────────────
 
   _getCoords(e) {
-    const rect   = this.overlayCanvas.getBoundingClientRect();
-    const cx = e.touches ? e.touches[0].clientX : e.clientX;
-    const cy = e.touches ? e.touches[0].clientY : e.clientY;
+    const rect = this.overlayCanvas.getBoundingClientRect();
+    let clientX, clientY;
+    
+    if (e.touches && e.touches.length > 0) {
+      clientX = e.touches[0].clientX;
+      clientY = e.touches[0].clientY;
+    } else if (e.changedTouches && e.changedTouches.length > 0) {
+      clientX = e.changedTouches[0].clientX;
+      clientY = e.changedTouches[0].clientY;
+    } else {
+      clientX = e.clientX;
+      clientY = e.clientY;
+    }
+
     return {
-      x: (cx - rect.left) * (this.overlayCanvas.width  / rect.width),
-      y: (cy - rect.top)  * (this.overlayCanvas.height / rect.height)
+      x: (clientX - rect.left) * (this.overlayCanvas.width  / rect.width),
+      y: (clientY - rect.top)  * (this.overlayCanvas.height / rect.height)
     };
   }
 
@@ -189,7 +211,7 @@ class AnnotationEngine {
 
     // ── Mouse down ────────────────────────────────────────────────────────
     cv.addEventListener('mousedown', (e) => {
-      if (!this.imageLoaded || e.button !== 0) return;
+      if (!this.imageLoaded || e.button !== 0 || this.tool === 'navigate') return;
       const coords = this._getCoords(e);
 
       // ── TEXT ──
@@ -201,14 +223,12 @@ class AnnotationEngine {
 
       // ── SELECT ──
       if (this.tool === 'select') {
-        // Check if clicking inside existing selection → start drag
         if (this.selectedIndices.length > 0 && this._pointInSelectedBounds(coords)) {
           this.isDraggingSelection = true;
           this.dragStart = coords;
           cv.style.cursor = 'move';
           return;
         }
-        // Otherwise start new marquee
         this.selectedIndices  = [];
         this.selectionRect    = { x: coords.x, y: coords.y, w: 0, h: 0 };
         this.isDraggingSelection = false;
@@ -230,10 +250,9 @@ class AnnotationEngine {
 
     // ── Mouse move ────────────────────────────────────────────────────────
     cv.addEventListener('mousemove', (e) => {
-      if (!this.imageLoaded) return;
+      if (!this.imageLoaded || this.tool === 'navigate') return;
       const coords = this._getCoords(e);
 
-      // Drag selected items
       if (this.tool === 'select' && this.isDraggingSelection && this.dragStart) {
         const dx = coords.x - this.dragStart.x;
         const dy = coords.y - this.dragStart.y;
@@ -243,7 +262,6 @@ class AnnotationEngine {
         return;
       }
 
-      // Grow marquee
       if (this.tool === 'select' && this.selectionRect && !this.isDraggingSelection) {
         this.selectionRect.w = coords.x - this.selectionRect.x;
         this.selectionRect.h = coords.y - this.selectionRect.y;
@@ -251,7 +269,6 @@ class AnnotationEngine {
         return;
       }
 
-      // Draw / erase stroke
       if (this.isDrawing && this.currentPath) {
         this.currentPath.points.push(coords);
         this._renderOverlay();
@@ -261,7 +278,6 @@ class AnnotationEngine {
 
     // ── Mouse up / leave ──────────────────────────────────────────────────
     const endAction = () => {
-      // Finish drag
       if (this.isDraggingSelection) {
         this.isDraggingSelection = false;
         this.dragStart = null;
@@ -269,7 +285,6 @@ class AnnotationEngine {
         return;
       }
 
-      // Commit marquee selection
       if (this.tool === 'select' && this.selectionRect) {
         this.selectedIndices = this._computeSelection(this.selectionRect);
         this.selectionRect   = null;
@@ -277,7 +292,6 @@ class AnnotationEngine {
         return;
       }
 
-      // Commit draw/erase stroke
       if (this.isDrawing && this.currentPath) {
         this.annotations.push(this.currentPath);
         this.currentPath = null;
@@ -290,7 +304,7 @@ class AnnotationEngine {
 
     // ── Touch ─────────────────────────────────────────────────────────────
     cv.addEventListener('touchstart', (e) => {
-      if (!this.imageLoaded) return;
+      if (!this.imageLoaded || e.touches.length > 1 || this.tool === 'navigate') return;
       e.preventDefault();
       const coords = this._getCoords(e);
       if (this.tool === 'text') { if (this.textInputEl) this._commitTextInput(); this._openTextInput(coords.x, coords.y); return; }
@@ -305,7 +319,7 @@ class AnnotationEngine {
     }, { passive: false });
 
     cv.addEventListener('touchmove', (e) => {
-      if (!this.imageLoaded) return;
+      if (!this.imageLoaded || e.touches.length > 1 || this.tool === 'navigate') return;
       e.preventDefault();
       const coords = this._getCoords(e);
       if (this.tool === 'select' && this.selectionRect) {

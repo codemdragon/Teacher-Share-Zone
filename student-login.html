@@ -93,13 +93,21 @@
     }
 
     // Auto-login via Direct URL params
-    // Format: student-login.html?name=John%20Doe&code=12345
+    // Format: student-login.html?token=OBFUSCATED_TOKEN or student-login.html?name=John%20Doe&code=12345
     window.addEventListener('DOMContentLoaded', () => {
       const params = new URLSearchParams(window.location.search);
+      const token = params.get('token');
       const name = params.get('name');
       const code = params.get('code');
 
-      if (name && code) {
+      if (token) {
+        const decrypted = window.deobfuscateParams(token);
+        if (decrypted && decrypted.studentName && decrypted.password) {
+          document.getElementById('student-name').value = decrypted.studentName;
+          document.getElementById('student-password').value = decrypted.password;
+          handleStudentLogin();
+        }
+      } else if (name && code) {
         document.getElementById('student-name').value = name;
         document.getElementById('student-password').value = code;
         handleStudentLogin();

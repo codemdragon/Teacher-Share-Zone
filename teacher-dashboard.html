@@ -11,9 +11,13 @@
   <div class="dashboard-wrapper">
     <!-- Sidebar -->
     <aside class="sidebar">
-      <div class="sidebar-header">
+      <div class="sidebar-header" style="display: flex; align-items: center; width: 100%;">
         <div class="logo-icon">T</div>
         <span class="logo-text">Share Zone</span>
+        <div id="notif-bell" onclick="showNotificationsModal()" style="margin-left: auto; cursor: pointer; position: relative; padding: 4px; color: var(--text-secondary);">
+          <i class="fa-solid fa-bell"></i>
+          <span id="notif-count" style="position: absolute; top: -5px; right: -5px; background: var(--accent-rose); color: white; border-radius: 50%; font-size: 0.65rem; padding: 2px 5px; display: none;">0</span>
+        </div>
       </div>
       <ul class="nav-menu">
         <li class="nav-item active" id="nav-classes" onclick="switchTab('classes')">
@@ -172,6 +176,19 @@
     </div>
   </div>
 
+  <!-- Notifications Modal -->
+  <div class="modal-overlay" id="notif-modal">
+    <div class="modal-content glass-card" style="max-width: 500px; width: 90%;">
+      <div class="modal-header">
+        <h3 style="font-size: 1.4rem;"><i class="fa-solid fa-bell"></i> Student Uploads & Activity</h3>
+        <button class="modal-close" onclick="closeModal('notif-modal')">&times;</button>
+      </div>
+      <div class="modal-body" id="notif-container" style="max-height: 50vh; overflow-y: auto; padding-top: 16px;">
+        <div style="text-align: center; color: var(--text-secondary); padding: 20px;">No new notifications.</div>
+      </div>
+    </div>
+  </div>
+
   <!-- Fullscreen Annotation Tool Modal -->
   <div class="annotation-modal" id="annotation-tool-modal" style="display: none;">
     <div class="annotation-toolbar">
@@ -179,7 +196,7 @@
         <span style="font-family: var(--font-display); font-weight: 700; font-size: 1.1rem; color: #fff;" id="annotating-filename">Annotate Work</span>
       </div>
       
-      <!-- Brush, Text, Erase, Select tools -->
+      <!-- Brush, Text, Erase, Select, Pan tools -->
       <div class="tool-group">
         <button class="tool-btn active" id="tool-draw" onclick="setTool('draw')" title="Draw Tool">
           <i class="fa-solid fa-pencil"></i>
@@ -192,6 +209,9 @@
         </button>
         <button class="tool-btn" id="tool-select" onclick="setTool('select')" title="Select Tool">
           <i class="fa-solid fa-square-check"></i>
+        </button>
+        <button class="tool-btn" id="tool-navigate" onclick="setTool('navigate')" title="Move/Pan (Navigate)">
+          <i class="fa-solid fa-hand"></i>
         </button>
       </div>
 
@@ -223,8 +243,11 @@
         <button class="tool-btn" onclick="annotator.clearSelected()" title="Delete Selected" style="color: var(--accent-rose);"><i class="fa-solid fa-trash"></i></button>
         <button class="tool-btn" onclick="annotator.clear()" title="Clear All"><i class="fa-solid fa-trash-can"></i></button>
         
-        <button class="btn btn-primary btn-sm" onclick="saveAnnotations()" style="margin-left: 12px;">
-          <i class="fa-solid fa-check"></i> Save & Exit
+        <button class="btn btn-secondary btn-sm" onclick="saveAnnotations(true)" style="margin-left: 12px; background: rgba(59, 130, 246, 0.2); border: 1px solid var(--accent-blue); color: var(--accent-blue);">
+          <i class="fa-solid fa-floppy-disk"></i> Save Draft
+        </button>
+        <button class="btn btn-primary btn-sm" onclick="saveAnnotations(false)" style="margin-left: 12px;">
+          <i class="fa-solid fa-paper-plane"></i> Publish & Exit
         </button>
       </div>
     </div>
@@ -276,6 +299,9 @@
       }
       document.getElementById('teacher-email').textContent = db.user.email;
       await loadClasses();
+      await checkNotifications();
+      // Poll notifications every 30 seconds
+      setInterval(checkNotifications, 30000);
     });
 
     function handleLogout() {
@@ -328,7 +354,9 @@
         for (const cls of classes) {
           const classStudents = await db.getStudents(cls.id);
           const studentRows = classStudents.map(student => {
-            const loginUrl = `${window.location.origin}/student-login.html?name=${encodeURIComponent(student.name)}&code=${student.password}`;
+            const token = window.obfuscateParams(cls.id, student.name, student.password);
+            const loginUrl = `${window.location.origin}/student-login.html?token=${token}`;
+            const uploadsAllowed = student.uploads_enabled !== false;
             return `
               <div class="student-row" onclick="openStudentWorkModal('${student.id}', '${student.name.replace(/'/g, "\\'")}')" style="cursor: pointer;" title="View Student Work">
                 <div class="student-info">
@@ -339,6 +367,9 @@
                   <button class="btn btn-secondary btn-sm" onclick="copyToClipboard('${loginUrl}', event)" title="Copy Direct Portal URL">
                     <i class="fa-solid fa-link"></i> Link
                   </button>
+                  <button class="btn btn-secondary btn-sm" onclick="toggleStudentBan('${student.id}', ${uploadsAllowed}, event)" title="${uploadsAllowed ? 'Ban Student Uploads' : 'Allow Student Uploads'}" style="color: ${uploadsAllowed ? 'var(--accent-teal)' : 'var(--accent-rose)'}; border-color: ${uploadsAllowed ? 'rgba(20,184,166,0.2)' : 'rgba(244,63,94,0.2)'}; background: ${uploadsAllowed ? 'rgba(20,184,166,0.05)' : 'rgba(244,63,94,0.05)'};">
+                    <i class="fa-solid ${uploadsAllowed ? 'fa-circle-check' : 'fa-ban'}"></i>
+                  </button>
                   <button class="btn btn-secondary btn-sm" style="color: var(--accent-rose);" onclick="deleteStudent('${student.id}', event)">
                     <i class="fa-solid fa-trash-can"></i>
                   </button>
@@ -346,6 +377,8 @@
               </div>
             `;
           }).join('');
+
+          const uploadsClassEnabled = cls.student_uploads_enabled !== false;
 
           const card = document.createElement('div');
           card.className = 'glass-card class-card';
@@ -356,8 +389,11 @@
                 <i class="fa-solid fa-trash-can"></i> Class
               </button>
             </div>
-            <div class="class-card-stats">
+            <div class="class-card-stats" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
               <span><i class="fa-solid fa-user-group"></i> ${classStudents.length} Students</span>
+              <label style="font-size: 0.85rem; color: var(--text-secondary); display: flex; align-items: center; gap: 6px; cursor: pointer;">
+                <input type="checkbox" ${uploadsClassEnabled ? 'checked' : ''} onchange="toggleStudentUploads('${cls.id}', this.checked)" style="width: auto; height: auto; cursor: pointer;"> Student Uploads
+              </label>
             </div>
             <button class="btn btn-secondary btn-block btn-sm" onclick="showAddStudentModal('${cls.id}', '${cls.name}', event)">
               <i class="fa-solid fa-user-plus"></i> Add Student
@@ -450,7 +486,7 @@
       });
     }
 
-    // View student work from Classes tab
+    // View student work from Classes tab - Lazy Loaded
     async function openStudentWorkModal(studentId, studentName) {
       currentWorkStudentId = studentId;
       currentWorkStudentName = studentName;
@@ -481,57 +517,77 @@
           groupDiv.style.marginBottom = '20px';
           groupDiv.style.padding = '20px';
           groupDiv.innerHTML = `
-            <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 12px; margin-bottom: 16px;">
-              <div style="display: flex; align-items: center; gap: 12px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; cursor: pointer;" onclick="toggleGroupExpand('${group.id}', this.parentElement)">
+              <div style="display: flex; align-items: center; gap: 12px;" onclick="event.stopPropagation()">
                 <h4 style="font-family: var(--font-display); font-size: 1.2rem; color: var(--accent-teal); margin: 0;">${group.name}</h4>
                 <button onclick="deleteImageGroup('${group.id}', event)" title="Delete entire group" style="background: none; border: none; color: var(--accent-rose); cursor: pointer; padding: 4px; font-size: 1rem;"><i class="fa-solid fa-trash-can"></i></button>
               </div>
-              <div style="display: flex; align-items: center; gap: 10px;">
+              <div style="display: flex; align-items: center; gap: 10px;" onclick="event.stopPropagation()">
                 <span style="font-size: 0.85rem; color: var(--text-secondary);">${new Date(group.created_at).toLocaleDateString()}</span>
+                <span class="badge ${group.shared ? 'badge-teal' : 'badge-secondary'}" style="font-size: 0.75rem;">${group.shared ? 'Sent' : 'Draft'}</span>
                 <button onclick="openAddImagesToGroup('${group.id}', event)" title="Add images to this group" style="background: rgba(20,184,166,0.15); border: 1px solid var(--accent-teal); color: var(--accent-teal); cursor: pointer; padding: 4px 10px; border-radius: 6px; font-size: 0.8rem; display: flex; align-items: center; gap: 5px;"><i class="fa-solid fa-plus"></i> Add Images</button>
+                <button class="expand-btn" onclick="toggleGroupExpand('${group.id}', this.parentElement.parentElement)" style="background: none; border: none; color: white; cursor: pointer; font-size: 1rem;"><i class="fa-solid fa-chevron-down"></i></button>
               </div>
             </div>
-            <div class="image-grid-preview" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 12px;"></div>
+            <div class="image-grid-preview" style="display: none; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 12px; margin-top: 16px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 16px;"></div>
           `;
-          
-          const gridDiv = groupDiv.querySelector('.image-grid-preview');
-          const images = await db.getImages(group.id);
-          
-          if (images.length === 0) {
-            gridDiv.innerHTML = '<p style="color: var(--text-secondary); font-size: 0.9rem;">No images in this group.</p>';
-          } else {
-            images.forEach(img => {
-              const thumb = document.createElement('div');
-              thumb.className = 'preview-thumb';
-              thumb.style.cursor = 'pointer';
-              thumb.title = 'Click to Annotate';
-              
-              thumb.innerHTML = `
-                <img src="${img.original_url}" alt="work">
-                <div style="position: absolute; bottom: 0; left: 0; right: 0; background: rgba(0,0,0,0.6); color: white; display: flex; justify-content: space-between; align-items: center; font-size: 0.75rem; padding: 4px 8px;">
-                  <span><i class="fa-solid fa-pencil"></i> Edit</span>
-                  <button onclick="deleteGroupImage('${img.id}', event)" title="Delete image" style="background: none; border: none; color: var(--accent-rose); cursor: pointer; padding: 0;"><i class="fa-solid fa-trash-can"></i></button>
-                </div>
-              `;
-              
-              // Bind click event to open annotator
-              thumb.onclick = () => {
-                // If the upload form is active, we don't want to interfere, but annotator modal is fullscreen.
-                // We just need to make sure we don't overwrite currentUploadGroup if it's unrelated.
-                openAnnotator(img.id, img.original_url, img.annotations);
-                
-                // We might need to refresh this specific modal after saving.
-                // We can override saveAnnotations temporarily or just re-open/refresh this modal on save.
-              };
-              
-              gridDiv.appendChild(thumb);
-            });
-          }
           
           container.appendChild(groupDiv);
         }
       } catch (err) {
         container.innerHTML = `<div style="text-align: center; color: var(--accent-rose); padding: 40px;">Error loading work: ${err.message}</div>`;
+      }
+    }
+
+    async function toggleGroupExpand(groupId, parentEl) {
+      const gridDiv = parentEl.querySelector('.image-grid-preview');
+      const expandBtn = parentEl.querySelector('.expand-btn i');
+      
+      if (gridDiv.style.display === 'none') {
+        gridDiv.style.display = 'grid';
+        expandBtn.className = 'fa-solid fa-chevron-up';
+        
+        if (!gridDiv.dataset.loaded) {
+          gridDiv.innerHTML = '<div style="grid-column: 1/-1; text-align: center; color: var(--text-secondary); padding: 20px;"><i class="fa-solid fa-spinner fa-spin"></i> Loading images...</div>';
+          try {
+            const images = await db.getImages(groupId);
+            gridDiv.innerHTML = '';
+            
+            if (images.length === 0) {
+              gridDiv.innerHTML = '<p style="grid-column: 1/-1; color: var(--text-secondary); font-size: 0.9rem; padding: 10px;">No images in this group.</p>';
+            } else {
+              images.forEach(img => {
+                const thumb = document.createElement('div');
+                thumb.className = 'preview-thumb';
+                thumb.style.cursor = 'pointer';
+                thumb.title = 'Click to Annotate';
+                
+                // Show indicator if uploaded by student
+                const tag = img.uploaded_by === 'student' ? '<span class="badge badge-teal" style="position: absolute; top: 4px; left: 4px; font-size: 0.6rem; padding: 1px 4px;">Student Upload</span>' : '';
+                
+                thumb.innerHTML = `
+                  <img src="${img.original_url}" alt="work">
+                  ${tag}
+                  <div style="position: absolute; bottom: 0; left: 0; right: 0; background: rgba(0,0,0,0.6); color: white; display: flex; justify-content: space-between; align-items: center; font-size: 0.75rem; padding: 4px 8px;">
+                    <span><i class="fa-solid fa-pencil"></i> Edit</span>
+                    <button onclick="deleteGroupImage('${img.id}', event)" title="Delete image" style="background: none; border: none; color: var(--accent-rose); cursor: pointer; padding: 0;"><i class="fa-solid fa-trash-can"></i></button>
+                  </div>
+                `;
+                
+                thumb.onclick = () => {
+                  openAnnotator(img.id, img.original_url, img.draft_annotations || img.annotations);
+                };
+                gridDiv.appendChild(thumb);
+              });
+            }
+            gridDiv.dataset.loaded = 'true';
+          } catch (err) {
+            gridDiv.innerHTML = `<p style="grid-column: 1/-1; color: var(--accent-rose); font-size: 0.9rem; padding: 10px;">Error: ${err.message}</p>`;
+          }
+        }
+      } else {
+        gridDiv.style.display = 'none';
+        expandBtn.className = 'fa-solid fa-chevron-down';
       }
     }
 
@@ -694,7 +750,7 @@
           thumb.className = 'preview-thumb';
           thumb.style.cursor = 'pointer';
           thumb.title = 'Click to annotate';
-          thumb.onclick = () => openAnnotator(img.id, img.original_url, img.annotations);
+          thumb.onclick = () => openAnnotator(img.id, img.original_url, img.draft_annotations || img.annotations);
           thumb.innerHTML = `
             <img src="${img.original_url}" alt="work">
             <div class="thumb-actions">
@@ -752,7 +808,18 @@
     async function shareCreatedGroup() {
       if (!currentUploadGroup) return;
       try {
+        // Set shared = true
         await db.shareImageGroup(currentUploadGroup.id, true);
+        
+        // Publish all draft annotations in the group
+        const groupImages = await db.getImages(currentUploadGroup.id);
+        for (const img of groupImages) {
+          await db.publishAnnotations(img.id, img.draft_annotations || img.annotations || []);
+        }
+
+        // Notify student
+        await db.createNotification(null, currentUploadGroup.student_id, `Teacher shared a new assignment: ${currentUploadGroup.name}`);
+
         showToast("Assignment shared with student successfully!");
         resetUploadForm();
         switchTab('classes');
@@ -775,7 +842,7 @@
       }
 
       // Reset tool buttons UI
-      document.querySelectorAll('#tool-draw, #tool-text, #tool-erase').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('#tool-draw, #tool-text, #tool-erase, #tool-select').forEach(b => b.classList.remove('active'));
       document.getElementById('tool-draw').classList.add('active');
 
       // Init annotation engine using the wrapper div — it builds its own canvases
@@ -791,7 +858,6 @@
     }
 
     function setTool(toolName) {
-      // Only toggle the annotation tool buttons, not undo/redo/clear
       document.querySelectorAll('#tool-draw, #tool-text, #tool-erase, #tool-select').forEach(b => b.classList.remove('active'));
       document.getElementById(`tool-${toolName}`).classList.add('active');
       if (annotator) annotator.tool = toolName;
@@ -816,18 +882,26 @@
       if (annotator) annotator.setZoom(parseInt(val));
     }
 
-    async function saveAnnotations() {
+    async function saveAnnotations(isDraft = true) {
       if (!annotatingImageId || !annotator) return;
       try {
-        // Commit any in-progress text input before saving
         if (annotator.textInputEl) annotator._commitTextInput();
 
         const annotations = annotator.getAnnotations();
         const currentAnnotationsString = JSON.stringify(annotations);
         
         if (currentAnnotationsString !== initialAnnotationsString) {
-          await db.updateImageAnnotations(annotatingImageId, annotations);
-          showToast("Annotations saved successfully!");
+          if (isDraft) {
+            await db.updateImageDraftAnnotations(annotatingImageId, annotations);
+            showToast("Draft saved successfully!");
+          } else {
+            await db.publishAnnotations(annotatingImageId, annotations);
+            showToast("Annotations published successfully!");
+            // Notify student if we have details
+            if (currentWorkStudentId) {
+              await db.createNotification(null, currentWorkStudentId, "Teacher updated feedback on your work");
+            }
+          }
         }
 
         // Close modal and cleanup
@@ -843,6 +917,100 @@
         }
       } catch (err) {
         showToast("Failed to save annotations: " + err.message, "error");
+      }
+    }
+
+    // Toggle Settings Handlers
+    async function toggleStudentUploads(classId, enabled) {
+      try {
+        await db.updateClassUploadSettings(classId, enabled);
+        showToast(enabled ? "Student uploads enabled for this class." : "Student uploads disabled for this class.");
+      } catch (err) {
+        showToast("Failed to update settings: " + err.message, "error");
+      }
+    }
+
+    async function toggleStudentBan(studentId, currentAllowed, e) {
+      if (e) e.stopPropagation();
+      try {
+        const nextStatus = !currentAllowed;
+        await db.updateStudentUploadSettings(studentId, nextStatus);
+        showToast(nextStatus ? "Student uploads unbanned." : "Student uploads banned.");
+        await loadClasses();
+      } catch (err) {
+        showToast("Failed to update student settings: " + err.message, "error");
+      }
+    }
+
+    // Notifications checks
+    async function checkNotifications() {
+      if (!db.isLoggedIn()) return;
+      try {
+        const notifs = await db.getNotifications(db.user.id, null);
+        const countBadge = document.getElementById('notif-count');
+        
+        if (notifs.length > 0) {
+          countBadge.textContent = notifs.length;
+          countBadge.style.display = 'block';
+        } else {
+          countBadge.style.display = 'none';
+        }
+      } catch (err) {
+        console.error("Notifications fetch failed:", err);
+      }
+    }
+
+    async function showNotificationsModal() {
+      openModal('notif-modal');
+      const container = document.getElementById('notif-container');
+      container.innerHTML = '<div style="text-align: center; color: var(--text-secondary);"><i class="fa-solid fa-spinner fa-spin"></i> Loading...</div>';
+
+      try {
+        const notifs = await db.getNotifications(db.user.id, null);
+        if (notifs.length === 0) {
+          container.innerHTML = '<div style="text-align: center; color: var(--text-secondary); padding: 20px;">No new student uploads.</div>';
+          return;
+        }
+
+        container.innerHTML = '';
+        notifs.forEach(n => {
+          const item = document.createElement('div');
+          item.className = 'student-row';
+          item.style.padding = '12px';
+          item.style.marginBottom = '8px';
+          item.style.cursor = 'default';
+          item.innerHTML = `
+            <div style="flex: 1;">
+              <p style="margin: 0; font-size: 0.95rem; color: white;">${n.message}</p>
+              <span style="font-size: 0.75rem; color: var(--text-secondary);">${new Date(n.created_at).toLocaleString()}</span>
+            </div>
+            <button class="btn btn-secondary btn-sm" onclick="dismissNotification('${n.id}', this.parentElement)" style="color: var(--accent-teal); border-color: rgba(20,184,166,0.2);">
+              <i class="fa-solid fa-check"></i> Clear
+            </button>
+          `;
+          container.appendChild(item);
+        });
+      } catch (err) {
+        container.innerHTML = `<div style="color: var(--accent-rose);">Error loading notifications: ${err.message}</div>`;
+      }
+    }
+
+    async function dismissNotification(id, element) {
+      try {
+        // Mark as read
+        await db.request(`/rest/v1/notifications?id=eq.${id}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ read: true })
+        });
+        element.remove();
+        await checkNotifications();
+        
+        const container = document.getElementById('notif-container');
+        if (container.children.length === 0) {
+          container.innerHTML = '<div style="text-align: center; color: var(--text-secondary); padding: 20px;">No new student uploads.</div>';
+        }
+      } catch (err) {
+        showToast("Failed to clear notification: " + err.message, "error");
       }
     }
 
